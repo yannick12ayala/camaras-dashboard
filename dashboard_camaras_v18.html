@@ -571,6 +571,15 @@ function processRows(rows) {
   });
   if (!dataRows.length) { setSyncState('error', 'No se encontraron filas válidas.'); return; }
 
+  // DEBUG - mostrar headers y valor conectividad del primer row
+  const allKeys = Object.keys(dataRows[0]);
+  const conectKey = allKeys.find(k => k.includes('Conectividad') || k.includes('conectividad') || k.includes('CONECTIVIDAD'));
+  console.log('Headers:', allKeys.slice(30,35));
+  console.log('Conectividad key encontrada:', conectKey);
+  console.log('Valor conectividad row 0:', dataRows[0][conectKey]);
+  const conCount = dataRows.filter(r => String(r[conectKey]).trim() === '1').length;
+  console.log('Total con conectividad=1:', conCount);
+
   const keys = Object.keys(dataRows[0]);
   const k = {
     total:        findCol(keys,'Total de Cámaras','Total Cám'),
