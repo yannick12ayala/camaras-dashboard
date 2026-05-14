@@ -1024,17 +1024,21 @@ function filterMap(type, btn) {
 function updateMapFromRows(dataRows, keys) {
   if (!mapInstance) return;
   function dmsToDecimal(s) {
-    if (!s || s === 'nan') return null;
-    const m = String(s).trim().match(/(\d+)°(\d+)'([\d.]+)"([NSEO])/);
+    if (!s || s === 'nan' || s === '0') return null;
+    const str = String(s).trim();
+    const m = str.match(/(\d+)[°º](\d+)['\']([\.\d]+)["\"](\s*[NSEOnseo])/);
     if (!m) return null;
     let d = parseFloat(m[1]) + parseFloat(m[2])/60 + parseFloat(m[3])/3600;
-    if (m[4]==='S'||m[4]==='O') d=-d;
+    const dir = m[4].trim().toUpperCase();
+    if (dir==='S'||dir==='O') d=-d;
     return d;
   }
   const cams = [];
   dataRows.forEach(r => {
-    const latCol = Object.keys(r).find(k=>k.includes('COORD'));
-    const lonCol = Object.keys(r).find(k=>k.includes('Unnamed') || k.includes('35'));
+    const allK = Object.keys(r);
+    const latCol = allK.find(k=>k.includes('COORD') || k.includes('Coord'));
+    const latIdx = allK.indexOf(latCol);
+    const lonCol = latIdx >= 0 ? allK[latIdx+1] : allK.find(k=>k.includes('Unnamed') || k.includes('35'));
     const lat = dmsToDecimal(latCol ? r[latCol] : null);
     const lon = dmsToDecimal(lonCol ? r[lonCol] : null);
     if (!lat||!lon) return;
