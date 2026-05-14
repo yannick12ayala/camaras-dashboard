@@ -1039,7 +1039,7 @@ function updateMapFromRows(dataRows, keys) {
     const lon = dmsToDecimal(lonCol ? r[lonCol] : null);
     if (!lat||!lon) return;
     const safe = v => { const s=String(v||''); return s==='nan'?'':s; };
-    const safeInt = v => { try{return parseInt(v)||0}catch{return 0} };
+    const safeInt = v => { try{return Math.round(parseFloat(v))||0}catch{return 0} };
     cams.push({
       id: safe(r[keys.id]||'').replace('.0',''),
       direccion: safe(r[keys.direccion]||''),
@@ -1063,6 +1063,8 @@ function updateMapFromRows(dataRows, keys) {
       lat, lon
     });
   });
+  const conMap = cams.filter(c => c.conectividad === 1).length;
+  console.log('Cams con conectividad en mapa:', conMap, 'de', cams.length);
   if (cams.length > 0) initMap(cams);
 }
 
