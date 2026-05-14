@@ -902,10 +902,9 @@ let mapInstance = null;
 let allMarkers = [];
 
 function getMarkerColor(cam) {
-  if (!cam.relevado) return '#f5a623';
+  if (cam.relevado !== 1) return '#f5a623';
   if (cam.conectividad === 1) return '#3ecf8e';
-  if (cam.conectividad === 0 && cam.isp) return '#ff6b6b';
-  return '#8b90a7';
+  return '#ff6b6b';
 }
 
 function makeSVGIcon(color) {
@@ -997,7 +996,7 @@ function initMap(cameras) {
   // Update filter button counts
   const total = cameras.length;
   const okCount = cameras.filter(c => c.conectividad === 1).length;
-  const noConCount = cameras.filter(c => c.conectividad !== 1 && c.isp).length;
+  const noConCount = cameras.filter(c => c.relevado === 1 && c.conectividad !== 1).length;
   const noRelCount = cameras.filter(c => !c.relevado).length;
   document.querySelector('.map-filter-btn.all').textContent = `Todas (${total})`;
   document.querySelector('.map-filter-btn.ok').textContent = `Con conectividad (${okCount})`;
@@ -1013,7 +1012,7 @@ function filterMap(type, btn) {
     let show = false;
     if (type === 'all')   show = true;
     if (type === 'ok')    show = cam.conectividad === 1;
-    if (type === 'nocon') show = cam.conectividad !== 1 && !!cam.isp;
+    if (type === 'nocon') show = cam.relevado === 1 && cam.conectividad !== 1;
     if (type === 'norel') show = !cam.relevado;
     if (show) m.addTo(mapInstance);
     else mapInstance.removeLayer(m);
