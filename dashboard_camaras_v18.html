@@ -181,7 +181,7 @@
   .map-filter-btn.active { color: #0f1117; font-weight: 600; border-color: transparent; }
   .map-filter-btn.all.active    { background: #8b90a7; }
   .map-filter-btn.ok.active     { background: #3ecf8e; }
-  .map-filter-btn.nocon.active  { background: #ff6b6b; }
+  .map-filter-btn.nocon.active  { background: #8b90a7; }
   .map-filter-btn.norel.active  { background: #f5a623; }
   .leaflet-popup-content-wrapper {
     background: #181c27 !important;
@@ -363,7 +363,7 @@
     <div id="mapContainer"></div>
     <div class="map-legend">
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#3ecf8e"></div>Con conectividad</div>
-      <div class="map-legend-item"><div class="map-legend-dot" style="background:#ff6b6b"></div>Sin conectividad</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7"></div>Sin conectividad</div><div class="map-legend-item"><div class="map-legend-dot" style="background:#ff6b6b"></div>Con problema activo</div>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#f5a623"></div>Sin relevar</div>
       
     </div>
@@ -903,8 +903,9 @@ let allMarkers = [];
 
 function getMarkerColor(cam) {
   if (cam.relevado !== 1) return '#f5a623';
+  if (cam.probConect === 1) return '#ff6b6b';
   if (cam.conectividad === 1) return '#3ecf8e';
-  return '#ff6b6b';
+  return '#8b90a7';
 }
 
 function makeSVGIcon(color) {
