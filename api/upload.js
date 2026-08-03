@@ -22,9 +22,8 @@ function decodeEnvelope(buf) {
   if (buf.length && buf[0] === 0x7b /* '{' */) {
     try {
       const obj = JSON.parse(buf.toString('utf8'));
-      if (obj && typeof obj.$content === 'string') {
-        return Buffer.from(obj.$content, 'base64');
-      }
+      const bytes = bytesFromObject(obj);
+      if (bytes) return bytes;
     } catch { /* no era JSON: lo usamos tal cual */ }
   }
   return buf;
@@ -32,13 +31,23 @@ function decodeEnvelope(buf) {
 
 // Obtiene los bytes del cuerpo sin importar cómo lo entregue el runtime:
 // Vercel puede pre-parsearlo (Buffer, objeto JSON o string) o dejarlo como stream.
+// Extrae los bytes reales desde un objeto JSON ya parseado, aceptando varias
+// formas: el envoltorio de Power Automate ($content) o campos b64/content.
+function bytesFromObject(o) {
+  if (o && typeof o === 'object') {
+    if (typeof o.$content === 'string') return Buffer.from(o.$content, 'base64');
+    if (typeof o.b64 === 'string')       return Buffer.from(o.b64, 'base64');
+    if (typeof o.content === 'string')   return Buffer.from(o.content, 'base64');
+  }
+  return null;
+}
+
 async function getBytes(req) {
   const b = req.body;
   if (Buffer.isBuffer(b)) return decodeEnvelope(b);
   if (b instanceof ArrayBuffer) return decodeEnvelope(Buffer.from(b));
-  if (b && typeof b === 'object' && typeof b.$content === 'string') {
-    return Buffer.from(b.$content, 'base64'); // envoltorio ya parseado a objeto
-  }
+  const fromObj = bytesFromObject(b);
+  if (fromObj) return fromObj;
   if (typeof b === 'string' && b.length) return decodeEnvelope(Buffer.from(b, 'utf8'));
   return decodeEnvelope(await readStream(req));
 }
