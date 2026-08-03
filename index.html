@@ -219,15 +219,53 @@
   .map-legend-item { display: flex; align-items: center; gap: 6px; }
   .map-legend-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); }
 
+  /* ── MOBILE: teléfono grande / tablet chica ─────────────── */
   @media (max-width: 720px) {
-    header { padding: 1rem; }
+    header { padding: 0.85rem 1rem; }
+    .logo-icon, .logo-icon img { height: 40px; }
+    .logo-text { font-size: 14px; }
     .badge-time { display: none; }
     main { padding: 1rem; }
-    .sync-bar { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 8px; }
+    .section-label { margin-top: 1.5rem; }
+
+    /* Barra de sync: estado en una fila, botones grandes debajo */
+    .sync-bar { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 10px; }
+    .sync-status { flex-basis: 100%; }
+    .btn-refresh, .btn-manual { flex: 1; justify-content: center; padding: 9px 14px; }
+
+    .metrics-grid { gap: 10px; }
+    .metric-value { font-size: 24px; }
+
     .charts-grid { grid-template-columns: 1fr; }
     .charts-grid .span2 { grid-column: span 1; }
+    .chart-card { padding: 1.1rem 1.15rem; }
+
     .isp-grid { grid-template-columns: 1fr 1fr; }
-    .relevamiento-wrap { flex-direction: column; }
+
+    /* Relevamiento y conectividad-vs-problemas: apilar dona + detalle */
+    .relevamiento-wrap { flex-direction: column; align-items: stretch; }
+    .relevamiento-donut { align-self: center; }
+    .conprob-wrap { flex-direction: column; gap: 18px; align-items: stretch; }
+    .conprob-chart-area { align-self: center; }
+
+    /* Mapa más bajo y botones de filtro más tocables */
+    #mapContainer { height: 380px; }
+    .map-filter-btn { padding: 7px 14px; }
+
+    /* Tabla de incidentes: scroll horizontal propio (no empuja la página) */
+    .prob-summary { flex-wrap: wrap; gap: 10px 16px; }
+    .prob-table-wrap { overflow-x: auto; }
+    .prob-table { min-width: 460px; }
+  }
+
+  /* ── MOBILE: teléfono chico ──────────────────────────────── */
+  @media (max-width: 480px) {
+    .logo-sub { display: none; }
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .isp-grid { grid-template-columns: 1fr; }
+    .metric-value { font-size: 22px; }
+    #mapContainer { height: 320px; }
+    .obs-card { padding: 0.9rem 1rem; }
   }
 
   /* ── PDF BUTTON ─────────────────────────────────────────── */
