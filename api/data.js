@@ -19,7 +19,9 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Todavía no hay datos cargados' });
     }
 
-    const upstream = await fetch(blobs[0].url, { cache: 'no-store' });
+    // Cache-buster: evita que el CDN sirva una versión vieja del blob
+    const freshUrl = `${blobs[0].url}?ts=${Date.now()}`;
+    const upstream = await fetch(freshUrl, { cache: 'no-store' });
     if (!upstream.ok) {
       return res.status(502).json({ error: `Blob HTTP ${upstream.status}` });
     }
