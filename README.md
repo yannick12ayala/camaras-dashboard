@@ -55,9 +55,20 @@ Pasos del flujo:
    - **URI:** `https://<tu-proyecto>.vercel.app/api/upload`
    - **Headers:**
      - `x-upload-secret` : `<el mismo UPLOAD_SECRET del paso 4>`
-     - `Content-Type` : `application/octet-stream`
-   - **Body:** el *File Content* del paso 1.
+     - `Content-Type` : `application/json`
+   - **Body:** JSON con el contenido del archivo en base64 (una expresión):
+     ```
+     { "b64": "@{body('Obtener_contenido_de_archivo')?['$content']}" }
+     ```
 3. Guardá y probá con **Test → Manually**. Debe responder `200` con `{ "ok": true, ... }`.
+
+> **Importante — por qué así:** Power Automate representa el archivo como
+> `{"$content-type": "...", "$content": "<base64>"}`. Si se manda como binario
+> (`application/octet-stream`) o sin `Content-Type`, el runtime de Vercel no
+> bufferea el cuerpo y llega vacío (400 "El cuerpo está vacío"). Mandándolo como
+> **JSON** con el base64 en `b64`, Vercel lo parsea y el endpoint lo decodifica.
+> El endpoint `/api/upload` acepta además `$content` y `content` como campos
+> equivalentes, por robustez.
 
 > **Nota:** la acción *HTTP* es un conector premium de Power Automate. Si no
 > tenés licencia premium, avisá y vemos una alternativa (que Vercel lea el
