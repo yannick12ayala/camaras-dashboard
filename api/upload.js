@@ -1,11 +1,9 @@
 // POST /api/upload
-// Recibe el Excel desde Power Automate y lo guarda en Vercel Blob.
-// Autenticación: header  x-upload-secret: <UPLOAD_SECRET>
-// El secreto vive SOLO como variable de entorno en Vercel (nunca en el cliente).
+// Recibe el Excel desde Power Automate y lo guarda como base64 en un Gist de GitHub.
+// Auth: header  x-upload-secret: <UPLOAD_SECRET>
+// El token de GitHub vive SOLO como variable de entorno en Vercel (nunca en el cliente).
 
-import { put } from '@vercel/blob';
-
-const BLOB_PATH = 'camaras/data.xlsx';
+const GIST_FILENAME = 'camaras_data_b64.txt';
 
 async function readStream(req) {
   const chunks = [];
@@ -15,24 +13,8 @@ async function readStream(req) {
   return Buffer.concat(chunks);
 }
 
-// Power Automate envía el contenido de archivo envuelto como
-//   {"$content-type": "...", "$content": "<base64>"}
-// Si detectamos ese envoltorio, devolvemos los bytes reales decodificados.
-function decodeEnvelope(buf) {
-  if (buf.length && buf[0] === 0x7b /* '{' */) {
-    try {
-      const obj = JSON.parse(buf.toString('utf8'));
-      const bytes = bytesFromObject(obj);
-      if (bytes) return bytes;
-    } catch { /* no era JSON: lo usamos tal cual */ }
-  }
-  return buf;
-}
-
-// Obtiene los bytes del cuerpo sin importar cómo lo entregue el runtime:
-// Vercel puede pre-parsearlo (Buffer, objeto JSON o string) o dejarlo como stream.
-// Extrae los bytes reales desde un objeto JSON ya parseado, aceptando varias
-// formas: el envoltorio de Power Automate ($content) o campos b64/content.
+// Extrae bytes reales desde un objeto JSON ya parseado: acepta el envoltorio de
+// Power Automate ($content) o campos b64/content.
 function bytesFromObject(o) {
   if (o && typeof o === 'object') {
     if (typeof o.$content === 'string') return Buffer.from(o.$content, 'base64');
@@ -40,6 +22,16 @@ function bytesFromObject(o) {
     if (typeof o.content === 'string')   return Buffer.from(o.content, 'base64');
   }
   return null;
+}
+
+function decodeEnvelope(buf) {
+  if (buf.length && buf[0] === 0x7b /* '{' */) {
+    try {
+      const bytes = bytesFromObject(JSON.parse(buf.toString('utf8')));
+      if (bytes) return bytes;
+    } catch { /* no era JSON: usar tal cual */ }
+  }
+  return buf;
 }
 
 async function getBytes(req) {
@@ -57,12 +49,14 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
   }
-
   if (!process.env.UPLOAD_SECRET) {
     return res.status(500).json({ error: 'UPLOAD_SECRET no está configurado en el servidor' });
   }
   if (req.headers['x-upload-secret'] !== process.env.UPLOAD_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!process.env.GITHUB_TOKEN || !process.env.GIST_ID) {
+    return res.status(500).json({ error: 'GITHUB_TOKEN o GIST_ID no están configurados en el servidor' });
   }
 
   let bytes;
@@ -75,16 +69,25 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'El cuerpo está vacío' });
   }
 
+  const b64 = bytes.toString('base64');
   try {
-    const blob = await put(BLOB_PATH, bytes, {
-      access: 'public',
-      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      cacheControlMaxAge: 0,
+    const r = await fetch(`https://api.github.com/gists/${process.env.GIST_ID}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'camaras-dashboard',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ files: { [GIST_FILENAME]: { content: b64 } } }),
     });
-    return res.status(200).json({ ok: true, size: bytes.length, url: blob.url });
+    if (!r.ok) {
+      const t = await r.text();
+      return res.status(502).json({ error: `GitHub HTTP ${r.status}`, detail: t.slice(0, 300) });
+    }
+    return res.status(200).json({ ok: true, size: bytes.length });
   } catch (e) {
-    return res.status(500).json({ error: 'No se pudo guardar en Blob', detail: String(e) });
+    return res.status(500).json({ error: 'No se pudo guardar en el Gist', detail: String(e) });
   }
 }
