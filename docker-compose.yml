@@ -1,0 +1,13 @@
+services:
+  dashboard:
+    build: .
+    container_name: camaras-dashboard
+    restart: unless-stopped
+    ports:
+      - "80:8080"          # se accede por  http://172.22.130.170
+    environment:
+      - UPLOAD_SECRET=${UPLOAD_SECRET}
+      - VIEW_USER=${VIEW_USER}
+      - VIEW_PASS=${VIEW_PASS}
+    volumes:
+      - ./data:/data       # el Excel se guarda en ./data/camaras.xlsx (persistente)
