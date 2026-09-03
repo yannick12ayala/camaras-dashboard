@@ -422,7 +422,11 @@
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#3ecf8e"></div>Con conectividad</div>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7"></div>Sin conectividad</div><div class="map-legend-item"><div class="map-legend-dot" style="background:#ff6b6b"></div>Con problema activo</div>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#f5a623"></div>Sin relevar</div>
-      
+      <span style="flex-basis:100%;height:0"></span>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#a16207"></div>Basural (B)</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#ea580c"></div>Microbasural (µ)</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#7c3aed"></div>Crónico (C)</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#0891b2"></div>Coincidente (◆)</div>
     </div>
   </div>
 
@@ -966,6 +970,30 @@ function makeSVGIcon(color) {
   });
 }
 
+// Categorías especiales detectadas por el prefijo de la dirección
+const CATEGORIAS = {
+  microbasural: { label: 'Microbasural', color: '#ea580c', letra: 'µ' },
+  basural:      { label: 'Basural',      color: '#a16207', letra: 'B' },
+  cronico:      { label: 'Crónico',      color: '#7c3aed', letra: 'C' },
+  coincidente:  { label: 'Coincidente',  color: '#0891b2', letra: '◆' },
+};
+function getCategoria(cam) {
+  const d = (cam.direccion || '').trim().toLowerCase();
+  if (d.startsWith('microbasural')) return 'microbasural';
+  if (d.startsWith('basural'))      return 'basural';
+  if (d.startsWith('cronico') || d.startsWith('crónico')) return 'cronico';
+  if (d.startsWith('coincid'))      return 'coincidente';
+  return null;
+}
+function makeCategoryIcon(cat) {
+  const c = CATEGORIAS[cat];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="39" viewBox="0 0 26 34">
+    <path d="M13 0C5.82 0 0 5.82 0 13c0 9.75 13 21 13 21s13-11.25 13-21C26 5.82 20.18 0 13 0z" fill="${c.color}" stroke="white" stroke-width="1.6"/>
+    <text x="13" y="18" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="700" fill="white">${c.letra}</text>
+  </svg>`;
+  return L.divIcon({ html: svg, className: '', iconSize: [30,39], iconAnchor: [15,39], popupAnchor: [0,-39] });
+}
+
 function formatDate(d) {
   if (!d || d === '' || d === 'nan') return '—';
   // Handle Excel date serial numbers
@@ -1034,8 +1062,9 @@ function initMap(cameras) {
   }).addTo(mapInstance);
 
   cameras.forEach(cam => {
-    const color = getMarkerColor(cam);
-    const marker = L.marker([cam.lat, cam.lon], { icon: makeSVGIcon(color) })
+    const cat = getCategoria(cam);
+    const icon = cat ? makeCategoryIcon(cat) : makeSVGIcon(getMarkerColor(cam));
+    const marker = L.marker([cam.lat, cam.lon], { icon })
       .bindPopup(buildPopup(cam), { maxWidth: 280 });
     marker.camData = cam;
     marker.addTo(mapInstance);
