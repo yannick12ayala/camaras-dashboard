@@ -11,8 +11,24 @@ const path = require('path');
 const PORT          = process.env.PORT || 8080;
 const DATA_FILE     = process.env.DATA_FILE || '/data/camaras.xlsx';
 const UPLOAD_SECRET = process.env.UPLOAD_SECRET || '';
-const VIEW_USER     = process.env.VIEW_USER || '';
-const VIEW_PASS     = process.env.VIEW_PASS || '';
+
+// Cuentas para ver el dashboard. Dos formas (se pueden combinar):
+//  - VIEW_USER / VIEW_PASS           -> una sola cuenta
+//  - VIEW_USERS = "u1:pass1,u2:pass2" -> varias cuentas (una por persona)
+function loadUsers() {
+  const map = new Map();
+  if (process.env.VIEW_USER && process.env.VIEW_PASS) {
+    map.set(process.env.VIEW_USER, process.env.VIEW_PASS);
+  }
+  for (const pair of (process.env.VIEW_USERS || '').split(',')) {
+    const p = pair.trim();
+    if (!p) continue;
+    const i = p.indexOf(':');
+    if (i > 0) map.set(p.slice(0, i).trim(), p.slice(i + 1));
+  }
+  return map;
+}
+const USERS = loadUsers();
 
 const PUBLIC_DIR = __dirname;
 const XLSX_TYPE  = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -33,14 +49,15 @@ function unauthorized(res) {
 }
 
 function checkAuth(req) {
-  if (!VIEW_USER && !VIEW_PASS) return true; // si no hay credenciales configuradas, no exige login
+  if (USERS.size === 0) return true; // si no hay cuentas configuradas, no exige login
   const h = req.headers['authorization'] || '';
   if (!h.startsWith('Basic ')) return false;
   let decoded = '';
   try { decoded = Buffer.from(h.slice(6), 'base64').toString('utf8'); } catch { return false; }
   const i = decoded.indexOf(':');
   if (i < 0) return false;
-  return decoded.slice(0, i) === VIEW_USER && decoded.slice(i + 1) === VIEW_PASS;
+  const user = decoded.slice(0, i), pass = decoded.slice(i + 1);
+  return USERS.has(user) && USERS.get(user) === pass;
 }
 
 function readBody(req, limitBytes = 25 * 1024 * 1024) {
