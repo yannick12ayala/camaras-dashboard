@@ -22,8 +22,11 @@ const DATA_FILE     = process.env.DATA_FILE || '/data/camaras.xlsx';
 const USERS_FILE    = process.env.USERS_FILE || '/data/users.json';
 const SECRET_FILE   = '/data/.session_secret';
 const UPLOAD_SECRET = process.env.UPLOAD_SECRET || '';
-const ADMIN_USER    = process.env.ADMIN_USER || 'admin';
+const ADMIN_USER    = (process.env.ADMIN_USER || 'admin').trim().toLowerCase();
 const ADMIN_PASS    = process.env.ADMIN_PASS || '';
+
+// Normaliza nombres de usuario (sin distinguir mayúsculas ni espacios)
+const norm = u => String(u || '').trim().toLowerCase();
 
 const PUBLIC_DIR  = __dirname;
 const XLSX_TYPE   = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -162,17 +165,19 @@ const server = http.createServer(async (req, res) => {
   if (m === 'GET' && STATIC_PUBLIC[url]) { const s = STATIC_PUBLIC[url]; return serveFile(res, s.file, s.type); }
 
   if (m === 'POST' && url === '/api/login') {
-    const { user, pass } = await readJson(req);
+    const body = await readJson(req);
+    const user = norm(body.user);
     const u = DB.users[user];
     if (!u) return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
     if (u.pending) return json(res, 200, { pending: true });
-    if (!checkSecretField(u, 'pass', pass || '')) return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
+    if (!checkSecretField(u, 'pass', body.pass || '')) return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
     setSessionCookie(res, user);
     return json(res, 200, { ok: true, isAdmin: !!u.isAdmin });
   }
 
   if (m === 'POST' && url === '/api/activate') {
-    const { user, code, newPass } = await readJson(req);
+    const body = await readJson(req);
+    const user = norm(body.user), code = body.code, newPass = body.newPass;
     const u = DB.users[user];
     if (!u || !u.pending) return json(res, 400, { error: 'Esta cuenta no está pendiente de activación' });
     if (!checkSecretField(u, 'code', (code || '').trim())) return json(res, 401, { error: 'Código de activación incorrecto' });
@@ -206,8 +211,8 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { users });
     }
     if (m === 'POST' && url === '/api/admin/create') {
-      const name = ((await readJson(req)).user || '').trim();
-      if (!/^[a-zA-Z0-9._-]{2,32}$/.test(name)) return json(res, 400, { error: 'Nombre inválido (2-32, letras/números/. _ -)' });
+      const name = norm((await readJson(req)).user);
+      if (!/^[a-z0-9._-]{2,32}$/.test(name)) return json(res, 400, { error: 'Nombre inválido (2-32, letras/números/. _ -)' });
       if (DB.users[name]) return json(res, 409, { error: 'Ese usuario ya existe' });
       const code = crypto.randomBytes(4).toString('hex');
       const u = { isAdmin: false, pending: true }; setSecretField(u, 'code', code);
@@ -215,7 +220,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, user: name, code });
     }
     if (m === 'POST' && url === '/api/admin/reset') {
-      const name = ((await readJson(req)).user || '').trim();
+      const name = norm((await readJson(req)).user);
       const u = DB.users[name];
       if (!u) return json(res, 404, { error: 'No existe' });
       const code = crypto.randomBytes(4).toString('hex');
@@ -224,7 +229,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, user: name, code });
     }
     if (m === 'POST' && url === '/api/admin/delete') {
-      const name = ((await readJson(req)).user || '').trim();
+      const name = norm((await readJson(req)).user);
       if (name === ADMIN_USER) return json(res, 400, { error: 'No se puede borrar el admin' });
       if (!DB.users[name]) return json(res, 404, { error: 'No existe' });
       delete DB.users[name]; saveUsers();
