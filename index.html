@@ -359,7 +359,10 @@
     <div class="metric-card blue"><div class="metric-label">Total cámaras</div><div class="metric-value" id="mTotal">—</div><div class="metric-sub">Proyecto V completo</div></div>
     <div class="metric-card green"><div class="metric-label">Cámaras fijas</div><div class="metric-value" id="mFijas">—</div><div class="metric-sub" id="mFijasPct"></div></div>
     <div class="metric-card amber"><div class="metric-label">LPR</div><div class="metric-value" id="mLPR">—</div><div class="metric-sub" id="mLPRPct"></div></div>
-    <div class="metric-card coral"><div class="metric-label">Domos</div><div class="metric-value" id="mDomos">—</div><div class="metric-sub">Comunes</div></div>
+    <div class="metric-card coral"><div class="metric-label">Domos Comunes</div><div class="metric-value" id="mDomos">—</div><div class="metric-sub">Comunes</div></div>
+    <div class="metric-card amber"><div class="metric-label">Domos Largo Alcance</div><div class="metric-value" id="mLargo">—</div><div class="metric-sub">Largo alcance</div></div>
+    <div class="metric-card teal"><div class="metric-label">Domos Multisensor</div><div class="metric-value" id="mMulti">—</div><div class="metric-sub">Multisensor</div></div>
+    <div class="metric-card purple"><div class="metric-label">Domos Doble Imagen</div><div class="metric-value" id="mDoble">—</div><div class="metric-sub">Doble imagen</div></div>
     <div class="metric-card purple"><div class="metric-label">Gabinetes</div><div class="metric-value" id="mGab">—</div><div class="metric-sub" id="mGabInst"></div></div>
     <div class="metric-card teal"><div class="metric-label">Columnas</div><div class="metric-value" id="mCol">—</div><div class="metric-sub">Total</div></div>
     <div class="metric-card indigo"><div class="metric-label">Relevados</div><div class="metric-value" id="mRelevados">—</div><div class="metric-sub" id="mRelevadosPct"></div></div>
@@ -609,6 +612,9 @@ function processRows(rows) {
     fijas:        findCol(keys,'Cámaras Fijas','Fijas'),
     lpr:          findCol(keys,'LPR'),
     domos:        findCol(keys,'Domos Comunes'),
+    domosLargo:   findCol(keys,'Domos Largo Alcance','Largo Alcance'),
+    domosMulti:   findCol(keys,'Domos Multisensor','Multisensor'),
+    domosDoble:   findCol(keys,'Domos doble imagen','Doble Imagen','doble imagen'),
     gab:          findCol(keys,'Cantidad de Gabinetes','Gabinetes'),
     col:          findCol(keys,'Cantidad de Columnas','Columnas'),
     instGab:      findCol(keys,'Instalación Gabinete'),
@@ -675,6 +681,7 @@ function processRows(rows) {
 
   buildCharts({
     total: sum(k.total), fijas: sum(k.fijas), lpr: sum(k.lpr), domos: sum(k.domos),
+    domosLargo: sum(k.domosLargo), domosMulti: sum(k.domosMulti), domosDoble: sum(k.domosDoble),
     gab: sum(k.gab), col: sum(k.col), instalados: instGabCount,
     poe: sum(k.poe), grua: sum(k.grua), brazo100: sum(k.b100), brazo60: sum(k.b60), jaula: sum(k.jaula),
     localidades: locs,
@@ -820,6 +827,9 @@ function buildCharts(d) {
   document.getElementById('mLPR').textContent      = d.lpr;
   document.getElementById('mLPRPct').textContent   = d.total>0 ? Math.round(d.lpr/d.total*100)+'% del total' : '';
   document.getElementById('mDomos').textContent    = d.domos;
+  document.getElementById('mLargo').textContent    = d.domosLargo;
+  document.getElementById('mMulti').textContent    = d.domosMulti;
+  document.getElementById('mDoble').textContent    = d.domosDoble;
   document.getElementById('mGab').textContent      = d.gab;
   document.getElementById('mGabInst').textContent  = d.instalados+' instalados';
   document.getElementById('mCol').textContent      = d.col;
@@ -856,10 +866,10 @@ function buildCharts(d) {
   }
 
   // Tipos
-  makeLegend('legendTipos', [{color:C.blue,label:'Cámaras Fijas',val:d.fijas},{color:C.green,label:'LPR',val:d.lpr},{color:C.coral,label:'Domos',val:d.domos}]);
+  makeLegend('legendTipos', [{color:C.blue,label:'Cámaras Fijas',val:d.fijas},{color:C.green,label:'LPR',val:d.lpr},{color:C.coral,label:'Domos Comunes',val:d.domos},{color:C.amber,label:'Domos Largo Alcance',val:d.domosLargo},{color:C.teal,label:'Domos Multisensor',val:d.domosMulti},{color:C.purple,label:'Doble Imagen',val:d.domosDoble}]);
   charts.tipos = new Chart(document.getElementById('chartTipos'), {
     type:'doughnut',
-    data:{labels:['Cámaras Fijas','LPR','Domos'],datasets:[{data:[d.fijas,d.lpr,d.domos],backgroundColor:[C.blue,C.green,C.coral],borderWidth:3,borderColor:'#181c27',hoverOffset:6}]},
+    data:{labels:['Cámaras Fijas','LPR','Domos Comunes','Domos Largo Alcance','Domos Multisensor','Doble Imagen'],datasets:[{data:[d.fijas,d.lpr,d.domos,d.domosLargo,d.domosMulti,d.domosDoble],backgroundColor:[C.blue,C.green,C.coral,C.amber,C.teal,C.purple],borderWidth:3,borderColor:'#181c27',hoverOffset:6}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${ctx.raw} (${d.total>0?Math.round(ctx.raw/d.total*100):0}%)`}}}}
   });
 
