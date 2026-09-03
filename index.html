@@ -1072,14 +1072,28 @@ function filterMap(type, btn) {
 function updateMapFromRows(dataRows, keys) {
   if (!mapInstance) return;
   function dmsToDecimal(s) {
-    if (!s || s === 'nan' || s === '0') return null;
-    const str = String(s).trim();
-    const m = str.match(/(\d+)[°º](\d+)['\']([\.\d]+)["\"](\s*[NSEOnseo])/);
-    if (!m) return null;
-    let d = parseFloat(m[1]) + parseFloat(m[2])/60 + parseFloat(m[3])/3600;
-    const dir = m[4].trim().toUpperCase();
-    if (dir==='S'||dir==='O') d=-d;
-    return d;
+    if (s === null || s === undefined) return null;
+    let str = String(s).trim();
+    if (!str || str.toLowerCase() === 'nan' || str === '0') return null;
+    // Normaliza comillas curvas/primas y el símbolo º
+    str = str.replace(/[‘’′´`]/g, "'").replace(/[“”″]/g, '"').replace(/º/g, '°');
+    // DMS: 34°24'53.76"S  (tolera espacios, y ' o " en los segundos)
+    const m = str.match(/(\d+(?:\.\d+)?)\s*°\s*(\d+(?:\.\d+)?)\s*'\s*(\d+(?:\.\d+)?)\s*["']?\s*([NSEOWnseow])?/);
+    if (m) {
+      let d = parseFloat(m[1]) + parseFloat(m[2])/60 + parseFloat(m[3])/3600;
+      const dir = (m[4]||'').toUpperCase();
+      if (dir==='S'||dir==='O'||dir==='W') d=-d;
+      return d;
+    }
+    // Decimal: -34.52  (tolera coma decimal y enteros sin punto: -34522102 -> -34.522102)
+    let num = str.replace(',', '.');
+    if (/^-?\d+(\.\d+)?$/.test(num)) {
+      let v = parseFloat(num);
+      if (!v) return null;
+      while (Math.abs(v) > 180) v = v/10;
+      return v;
+    }
+    return null;
   }
   const cams = [];
   dataRows.forEach(r => {
