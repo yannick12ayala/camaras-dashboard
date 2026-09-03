@@ -336,8 +336,22 @@
   <div class="header-right">
     <span class="badge" id="puntosCount">cargando…</span>
     <span class="badge-time" id="lastUpdate">—</span>
+    <span id="userMenu" style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2)">
+      <span id="meUser" style="color:var(--text);font-weight:500"></span>
+      <a href="/cuenta" style="color:var(--blue);text-decoration:none">Mi cuenta</a>
+      <a href="/admin" id="adminLink" hidden style="color:var(--blue);text-decoration:none">Admin</a>
+      <a href="#" id="logoutLink" style="color:var(--coral);text-decoration:none">Salir</a>
+    </span>
   </div>
 </header>
+<script>
+  fetch('/api/me').then(r=>r.ok?r.json():null).then(d=>{
+    if(!d)return;
+    document.getElementById('meUser').textContent = '👤 ' + d.user;
+    if(d.isAdmin) document.getElementById('adminLink').hidden = false;
+  }).catch(()=>{});
+  document.getElementById('logoutLink').onclick = async e => { e.preventDefault(); await fetch('/api/logout',{method:'POST'}); location.href='/login'; };
+</script>
 
 <div class="sync-bar">
   <div class="sync-status">
@@ -555,8 +569,9 @@ async function loadData() {
   setSyncState('loading', 'Conectando con el servidor de datos…');
   try {
     const resp = await fetch(EXCEL_URL, { cache: 'no-store' });
+    if (resp.status === 401) { location.href = '/login'; return; }
     if (resp.status === 404) {
-      setSyncState('error', 'Todavía no hay datos cargados. Ejecutá el flujo de Power Automate primero (o usá <strong>Cargar archivo manual</strong>).');
+      setSyncState('error', 'Todavía no hay datos cargados (subí el Excel o usá <strong>Cargar archivo manual</strong>).');
       return;
     }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Administración — Cámaras V</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0f1117;--surface:#181c27;--surface2:#1e2335;--border:rgba(255,255,255,.09);--text:#e8eaf0;--text2:#8b90a7;--blue:#4d8ef0;--green:#3ecf8e;--coral:#ff6b6b;--amber:#f5a623}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:1.5rem}
+  .wrap{max-width:720px;margin:0 auto}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:8px}
+  h1{font-size:19px;font-weight:600}
+  .links{font-size:12.5px;display:flex;gap:14px;align-items:center}
+  .links a{color:var(--blue);text-decoration:none} .links a:hover{text-decoration:underline}
+  .logout{color:var(--coral);background:none;border:0;cursor:pointer;font:inherit}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.25rem 1.4rem;margin-bottom:1.25rem}
+  .panel h2{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem}
+  .create{display:flex;gap:10px;flex-wrap:wrap}
+  input{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;flex:1;min-width:160px}
+  input:focus{border-color:var(--blue)}
+  button{background:var(--blue);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-size:13.5px;font-weight:600;cursor:pointer}
+  button:hover{filter:brightness(1.08)}
+  .codebox{margin-top:1rem;background:rgba(62,207,142,.08);border:1px solid rgba(62,207,142,.3);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--text);line-height:1.6}
+  .codebox b{font-family:'DM Mono',monospace;font-size:16px;color:var(--green);letter-spacing:.05em}
+  .codebox .small{color:var(--text2);font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:8px 10px;border-bottom:1px solid var(--border)}
+  td{padding:10px;border-bottom:1px solid var(--border);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
+  .tag.admin{background:rgba(77,142,240,.15);color:var(--blue)}
+  .tag.act{background:rgba(62,207,142,.15);color:var(--green)}
+  .tag.pend{background:rgba(245,166,35,.15);color:var(--amber)}
+  .act-btn{background:none;border:1px solid var(--border);color:var(--text2);border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;margin-left:6px}
+  .act-btn:hover{border-color:var(--blue);color:var(--text)}
+  .act-btn.del:hover{border-color:var(--coral);color:var(--coral)}
+  .err{color:var(--coral);font-size:12.5px;margin-top:.6rem;min-height:1em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>⚙️ Administración de perfiles</h1>
+    <div class="links">
+      <span style="color:var(--text2)">admin: <b id="who" style="color:var(--text)">…</b></span>
+      <a href="/">Dashboard</a>
+      <a href="/cuenta">Mi cuenta</a>
+      <button class="logout" id="logout">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <div class="panel">
+    <h2>Crear nuevo perfil</h2>
+    <div class="create">
+      <input id="newUser" placeholder="nombre de usuario (ej: jperez)" autocomplete="off">
+      <button id="createBtn">Crear perfil</button>
+    </div>
+    <div class="err" id="createErr"></div>
+    <div class="codebox" id="codeBox" hidden></div>
+  </div>
+
+  <div class="panel">
+    <h2>Perfiles</h2>
+    <table>
+      <thead><tr><th>Usuario</th><th>Tipo</th><th>Estado</th><th style="text-align:right">Acciones</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  fetch('/api/me').then(r=>r.json()).then(d=>{ $('who').textContent = d.user||''; });
+
+  function codeMsg(user, code){
+    $('codeBox').hidden = false;
+    $('codeBox').innerHTML = 'Perfil <b style="color:var(--text)">'+user+'</b> creado. Código de activación: <b>'+code+'</b>'
+      + '<div class="small">Pasale al usuario su nombre y este código. La primera vez que entre, con el código elige su propia contraseña. (El código se ve una sola vez.)</div>';
+  }
+
+  async function load(){
+    const d = await (await fetch('/api/admin/users')).json();
+    const rows = $('rows'); rows.innerHTML='';
+    (d.users||[]).forEach(u=>{
+      const tr = document.createElement('tr');
+      const tipo = u.isAdmin ? '<span class="tag admin">admin</span>' : 'usuario';
+      const estado = u.pending ? '<span class="tag pend">pendiente</span>' : '<span class="tag act">activo</span>';
+      let acciones = '';
+      if (!u.isAdmin) {
+        acciones = '<button class="act-btn" data-reset="'+u.user+'">Resetear clave</button>'
+                 + '<button class="act-btn del" data-del="'+u.user+'">Borrar</button>';
+      }
+      tr.innerHTML = '<td><b>'+u.user+'</b></td><td>'+tipo+'</td><td>'+estado+'</td><td style="text-align:right">'+acciones+'</td>';
+      rows.appendChild(tr);
+    });
+  }
+
+  $('createBtn').onclick = async () => {
+    $('createErr').textContent=''; $('codeBox').hidden=true;
+    const user = $('newUser').value.trim();
+    const r = await fetch('/api/admin/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user})});
+    const d = await r.json();
+    if (d.ok){ codeMsg(d.user, d.code); $('newUser').value=''; load(); }
+    else { $('createErr').textContent = d.error || 'Error'; }
+  };
+
+  document.addEventListener('click', async e => {
+    const reset = e.target.getAttribute('data-reset');
+    const del = e.target.getAttribute('data-del');
+    if (reset){
+      if(!confirm('¿Resetear la contraseña de "'+reset+'"? Se le dará un nuevo código para que vuelva a elegir clave.'))return;
+      const d = await (await fetch('/api/admin/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:reset})})).json();
+      if(d.ok){ codeMsg(d.user, d.code); load(); } else alert(d.error||'Error');
+    }
+    if (del){
+      if(!confirm('¿Borrar el perfil "'+del+'"? No podrá entrar más.'))return;
+      const d = await (await fetch('/api/admin/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:del})})).json();
+      if(d.ok) load(); else alert(d.error||'Error');
+    }
+  });
+
+  $('logout').onclick = async () => { await fetch('/api/logout',{method:'POST'}); location.href='/login'; };
+  load();
+</script>
+</body>
+</html>

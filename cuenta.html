@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi cuenta — Cámaras V</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0f1117;--surface:#181c27;--surface2:#1e2335;--border:rgba(255,255,255,.09);--text:#e8eaf0;--text2:#8b90a7;--blue:#4d8ef0;--green:#3ecf8e;--coral:#ff6b6b}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1.75rem;width:100%;max-width:400px}
+  h1{font-size:18px;font-weight:600}
+  .who{font-size:12.5px;color:var(--text2);margin:.35rem 0 1.4rem}
+  .who b{color:var(--text)}
+  label{display:block;font-size:12px;color:var(--text2);margin:.9rem 0 .35rem}
+  input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:11px 12px;color:var(--text);font-size:14px;outline:none}
+  input:focus{border-color:var(--blue)}
+  button{width:100%;margin-top:1.3rem;background:var(--blue);color:#fff;border:0;border-radius:9px;padding:12px;font-size:14px;font-weight:600;cursor:pointer}
+  button:hover{filter:brightness(1.08)}
+  .msg{font-size:12.5px;margin-top:.8rem;min-height:1em}
+  .err{color:var(--coral)} .ok{color:var(--green)}
+  .row{display:flex;gap:12px;justify-content:space-between;margin-top:1.4rem;font-size:12.5px}
+  .row a{color:var(--blue);text-decoration:none} .row a:hover{text-decoration:underline}
+  .logout{color:var(--coral)!important;background:none;border:0;cursor:pointer;font:inherit;padding:0}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Mi cuenta</h1>
+  <div class="who">Sesión iniciada como <b id="who">…</b> <span id="adminTag"></span></div>
+
+  <form id="pwForm">
+    <label for="cur">Contraseña actual</label>
+    <input id="cur" type="password" autocomplete="current-password">
+    <label for="np1">Nueva contraseña</label>
+    <input id="np1" type="password" autocomplete="new-password">
+    <label for="np2">Repetir nueva contraseña</label>
+    <input id="np2" type="password" autocomplete="new-password">
+    <div class="msg err" id="msg"></div>
+    <button type="submit">Cambiar contraseña</button>
+  </form>
+
+  <div class="row">
+    <a href="/">← Volver al dashboard</a>
+    <button class="logout" id="logout">Cerrar sesión</button>
+  </div>
+  <div class="row" id="adminRow" hidden><a href="/admin">⚙️ Panel de administración</a></div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  fetch('/api/me').then(r=>r.json()).then(d=>{
+    $('who').textContent = d.user || '';
+    if (d.isAdmin) { $('adminTag').textContent='(admin)'; $('adminRow').hidden=false; }
+  });
+  $('pwForm').onsubmit = async e => {
+    e.preventDefault();
+    const msg = $('msg'); msg.className='msg err'; msg.textContent='';
+    if ($('np1').value !== $('np2').value) { msg.textContent='Las contraseñas no coinciden'; return; }
+    if ($('np1').value.length < 6) { msg.textContent='La nueva contraseña debe tener al menos 6 caracteres'; return; }
+    const r = await fetch('/api/change-password', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPass:$('cur').value,newPass:$('np1').value})});
+    const d = await r.json();
+    if (d.ok) { msg.className='msg ok'; msg.textContent='✓ Contraseña cambiada'; $('pwForm').reset(); }
+    else { msg.textContent = d.error || 'Error'; }
+  };
+  $('logout').onclick = async () => { await fetch('/api/logout',{method:'POST'}); location.href='/login'; };
+</script>
+</body>
+</html>

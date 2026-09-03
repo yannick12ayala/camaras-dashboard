@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ingresar — Cámaras V</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0f1117;--surface:#181c27;--surface2:#1e2335;--border:rgba(255,255,255,.09);--text:#e8eaf0;--text2:#8b90a7;--blue:#4d8ef0;--green:#3ecf8e;--coral:#ff6b6b}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:radial-gradient(1200px 600px at 50% -10%,rgba(77,142,240,.10),transparent),var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:2rem 1.75rem;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+  .logo{height:56px;display:block;margin:0 auto .9rem}
+  h1{font-size:19px;font-weight:600;text-align:center;letter-spacing:-.02em}
+  .sub{font-size:12px;color:var(--text2);text-align:center;margin-top:2px;margin-bottom:1.5rem}
+  .sub2{font-size:13px;color:var(--text2);margin-bottom:1rem}
+  label{display:block;font-size:12px;color:var(--text2);margin:.9rem 0 .35rem}
+  input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:11px 12px;color:var(--text);font-size:14px;outline:none;transition:border-color .15s}
+  input:focus{border-color:var(--blue)}
+  button{width:100%;margin-top:1.3rem;background:var(--blue);color:#fff;border:0;border-radius:9px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;transition:filter .15s}
+  button:hover{filter:brightness(1.08)}
+  .link{display:block;text-align:center;margin-top:1rem;color:var(--blue);font-size:12.5px;text-decoration:none}
+  .link:hover{text-decoration:underline}
+  .err{color:var(--coral);font-size:12.5px;margin-top:.8rem;min-height:1em;line-height:1.4}
+  .ok{color:var(--green)}
+</style>
+</head>
+<body>
+<div class="card">
+  <img src="/icon.png" class="logo" alt="Cámaras V" onerror="this.style.display='none'">
+  <h1>Proyecto Cámaras V</h1>
+  <div class="sub">Municipalidad de Pilar</div>
+
+  <form id="loginForm">
+    <label for="lu">Usuario</label>
+    <input id="lu" autocomplete="username" autofocus>
+    <label for="lp">Contraseña</label>
+    <input id="lp" type="password" autocomplete="current-password">
+    <div class="err" id="loginErr"></div>
+    <button type="submit">Ingresar</button>
+    <a href="#" id="toActivate" class="link">¿Primera vez? Activá tu cuenta</a>
+  </form>
+
+  <form id="actForm" hidden>
+    <div class="sub2">Primera vez: ingresá el código que te dio el administrador y creá tu contraseña.</div>
+    <label for="au">Usuario</label>
+    <input id="au" autocomplete="username">
+    <label for="ac">Código de activación</label>
+    <input id="ac" placeholder="lo da el administrador">
+    <label for="ap1">Nueva contraseña</label>
+    <input id="ap1" type="password" autocomplete="new-password">
+    <label for="ap2">Repetir contraseña</label>
+    <input id="ap2" type="password" autocomplete="new-password">
+    <div class="err" id="actErr"></div>
+    <button type="submit">Activar y entrar</button>
+    <a href="#" id="toLogin" class="link">Volver al ingreso</a>
+  </form>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  const show = which => { $('loginForm').hidden = which!=='login'; $('actForm').hidden = which!=='act'; };
+  $('toActivate').onclick = e => { e.preventDefault(); $('au').value = $('lu').value.trim(); show('act'); };
+  $('toLogin').onclick   = e => { e.preventDefault(); show('login'); };
+
+  $('loginForm').onsubmit = async e => {
+    e.preventDefault(); $('loginErr').textContent = '';
+    const r = await fetch('/api/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:$('lu').value.trim(),pass:$('lp').value})});
+    const d = await r.json();
+    if (d.ok) { location.href='/'; return; }
+    if (d.pending) { $('au').value=$('lu').value.trim(); show('act'); $('actErr').textContent='Tu cuenta es nueva: ingresá el código y creá tu contraseña.'; return; }
+    $('loginErr').textContent = d.error || 'Error al ingresar';
+  };
+
+  $('actForm').onsubmit = async e => {
+    e.preventDefault(); $('actErr').textContent = '';
+    if ($('ap1').value !== $('ap2').value) { $('actErr').textContent = 'Las contraseñas no coinciden'; return; }
+    if ($('ap1').value.length < 6) { $('actErr').textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
+    const r = await fetch('/api/activate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:$('au').value.trim(),code:$('ac').value.trim(),newPass:$('ap1').value})});
+    const d = await r.json();
+    if (d.ok) { location.href='/'; return; }
+    $('actErr').textContent = d.error || 'Error al activar';
+  };
+</script>
+</body>
+</html>
