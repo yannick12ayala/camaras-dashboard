@@ -575,6 +575,12 @@ async function loadData() {
     const buf = await resp.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
+    // Cargar en paralelo los hyperlinks reales (la col "PDF URL" del Excel es
+    // solo texto visible; los links de OneDrive los da /api/hyperlinks).
+    try {
+      const hr = await fetch('/api/hyperlinks', { cache: 'no-store' });
+      window.PDF_LINKS = hr.ok ? await hr.json() : {};
+    } catch { window.PDF_LINKS = {}; }
     processRows(XLSX.utils.sheet_to_json(ws, { defval: 0 }));
     // Parse Observaciones sheet
     const obsSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('observ') || n.toLowerCase().includes('comentar'));
@@ -1155,8 +1161,14 @@ function updateMapFromRows(dataRows, keys) {
     if (!lat||!lon) return;
     const safe = v => { const s=String(v||''); return s==='nan'?'':s; };
     const safeInt = v => { try{return Math.round(parseFloat(v))||0}catch{return 0} };
+    const idStr = safe(r[keys.id]||'').replace('.0','');
+    // Preferir hyperlink real del Excel (extraído por el servidor); si no hay,
+    // caer al valor de texto de la celda.
+    const pdfFromLinks = (window.PDF_LINKS && window.PDF_LINKS[idStr]) || '';
+    const pdfFromCell  = safe(r[keys.pdfUrl]||'');
+    const pdfHref      = pdfFromLinks || (pdfFromCell.startsWith('http') ? pdfFromCell : '');
     cams.push({
-      id: safe(r[keys.id]||'').replace('.0',''),
+      id: idStr,
       direccion: safe(r[keys.direccion]||''),
       localidad: safe(r[keys.localidad]||''),
       barrio: safe(r[keys.barrio]||''),
@@ -1174,7 +1186,7 @@ function updateMapFromRows(dataRows, keys) {
       mb: safe(r[keys.mb]||''),
       probConect: safeInt(r[keys.probConect]||0),
       tipoProblem: safe(r[keys.tipoProblem]||''),
-      pdfUrl: safe(r[keys.pdfUrl]||''),
+      pdfUrl: pdfHref,
       lat, lon
     });
   });

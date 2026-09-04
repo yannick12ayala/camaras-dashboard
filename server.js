@@ -16,9 +16,11 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 const PORT          = process.env.PORT || 8080;
 const DATA_FILE     = process.env.DATA_FILE || '/data/camaras.xlsx';
+const LINKS_FILE    = process.env.LINKS_FILE || '/data/hyperlinks.json';
 const USERS_FILE    = process.env.USERS_FILE || '/data/users.json';
 const SECRET_FILE   = '/data/.session_secret';
 const UPLOAD_SECRET = process.env.UPLOAD_SECRET || '';
@@ -131,6 +133,99 @@ function readBody(req, limit = 25 * 1024 * 1024) {
 }
 async function readJson(req) { try { return JSON.parse((await readBody(req)).toString('utf8')); } catch { return {}; } }
 
+// ── Extraer hyperlinks de la columna "PDF URL" del xlsx ──
+// Devuelve {[id]: url}. Silenciosa: si algo falla, devuelve {}.
+function extractHyperlinks(xlsxBuf) {
+  try {
+    // 1. Enumerar entradas del ZIP central
+    let eocd = -1;
+    for (let i = xlsxBuf.length - 22; i >= Math.max(0, xlsxBuf.length - 65558); i--) {
+      if (xlsxBuf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) return {};
+    const cdOff = xlsxBuf.readUInt32LE(eocd + 16);
+    const nEnt  = xlsxBuf.readUInt16LE(eocd + 10);
+    const entries = {};
+    let off = cdOff;
+    for (let i = 0; i < nEnt; i++) {
+      if (xlsxBuf.readUInt32LE(off) !== 0x02014b50) break;
+      const method = xlsxBuf.readUInt16LE(off + 10);
+      const compSz = xlsxBuf.readUInt32LE(off + 20);
+      const nameLen = xlsxBuf.readUInt16LE(off + 28);
+      const extraLen = xlsxBuf.readUInt16LE(off + 30);
+      const commentLen = xlsxBuf.readUInt16LE(off + 32);
+      const localOff = xlsxBuf.readUInt32LE(off + 42);
+      const name = xlsxBuf.slice(off + 46, off + 46 + nameLen).toString('utf8');
+      const lfhNameLen = xlsxBuf.readUInt16LE(localOff + 26);
+      const lfhExtra = xlsxBuf.readUInt16LE(localOff + 28);
+      const dataStart = localOff + 30 + lfhNameLen + lfhExtra;
+      const raw = xlsxBuf.slice(dataStart, dataStart + compSz);
+      entries[name] = () => method === 0 ? raw : zlib.inflateRawSync(raw);
+      off += 46 + nameLen + extraLen + commentLen;
+    }
+    if (!entries['xl/worksheets/sheet1.xml'] || !entries['xl/worksheets/_rels/sheet1.xml.rels']) return {};
+
+    const sheetXml = entries['xl/worksheets/sheet1.xml']().toString('utf8');
+    const relsXml  = entries['xl/worksheets/_rels/sheet1.xml.rels']().toString('utf8');
+    const sharedXml = entries['xl/sharedStrings.xml'] ? entries['xl/sharedStrings.xml']().toString('utf8') : '';
+
+    // 2. rId -> URL
+    const rels = {};
+    for (const m of relsXml.matchAll(/<Relationship\s+[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"[^>]*TargetMode="External"[^>]*>/g)) {
+      rels[m[1]] = m[2].replace(/&amp;/g,'&');
+    }
+    // 3. Shared strings (para leer IDs que sean string en col A)
+    const sst = [];
+    for (const m of sharedXml.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
+      const txt = [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(t => t[1]).join('');
+      sst.push(txt.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>'));
+    }
+    // Helper: dado el XML de una celda, devuelve { ref, val } con val resuelto vía sst si es tipo 's'.
+    function readCell(xml) {
+      const ref = (xml.match(/\br="([^"]+)"/) || [])[1];
+      const t   = (xml.match(/\bt="([^"]+)"/) || [])[1];
+      const vm  = xml.match(/<v>([\s\S]*?)<\/v>/);
+      if (!ref || !vm) return null;
+      const raw = vm[1];
+      const val = t === 's' ? (sst[parseInt(raw)] || '') : raw;
+      return { ref, val };
+    }
+    // 4. Descubrir letra de la columna "PDF URL" leyendo la fila 1
+    const firstRow = sheetXml.match(/<row[^>]*r="1"[^>]*>([\s\S]*?)<\/row>/);
+    let pdfCol = null;
+    if (firstRow) {
+      for (const cm of firstRow[1].matchAll(/<c\s[^>]*>[\s\S]*?<\/c>/g)) {
+        const c = readCell(cm[0]);
+        if (!c) continue;
+        if (/pdf/i.test(c.val)) { pdfCol = c.ref.match(/^[A-Z]+/)[0]; break; }
+      }
+    }
+    if (!pdfCol) return {};
+    // 5. Recorrer <hyperlink ref="..." r:id="..."/> y quedarme con los de la columna PDF
+    const hyperlinks = {};
+    for (const hm of sheetXml.matchAll(/<hyperlink\s+[^>]*ref="([A-Z]+\d+)"[^>]*r:id="([^"]+)"[^>]*\/?>/g)) {
+      const ref = hm[1], rid = hm[2];
+      const colLetter = ref.match(/^[A-Z]+/)[0];
+      if (colLetter !== pdfCol) continue;
+      const rowNum = parseInt(ref.match(/\d+$/)[0]);
+      const url = rels[rid]; if (!url) continue;
+      // Buscar el ID (columna A) de esa fila
+      const rowMatch = sheetXml.match(new RegExp('<row[^>]*r="' + rowNum + '"[^>]*>([\\s\\S]*?)</row>'));
+      if (!rowMatch) continue;
+      const aXml = rowMatch[1].match(/<c\s[^>]*r="A\d+"[^>]*>[\s\S]*?<\/c>/);
+      if (!aXml) continue;
+      const a = readCell(aXml[0]);
+      if (!a) continue;
+      const idKey = String(a.val).replace('.0','').trim();
+      if (idKey) hyperlinks[idKey] = url;
+    }
+    return hyperlinks;
+  } catch (e) {
+    console.log('[extractHyperlinks] error:', e.message);
+    return {};
+  }
+}
+
 // Para /api/upload: acepta bytes crudos o JSON {b64|$content|content}
 function normalizeUpload(body) {
   if (body.length && body[0] === 0x7b) {
@@ -157,6 +252,12 @@ const server = http.createServer(async (req, res) => {
       if (!body.length) return json(res, 400, { error: 'El cuerpo esta vacio' });
       fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
       const tmp = DATA_FILE + '.tmp'; fs.writeFileSync(tmp, body); fs.renameSync(tmp, DATA_FILE);
+      // Extraer hyperlinks (para el botón "Ver ficha PDF"); fallo silencioso.
+      try {
+        const links = extractHyperlinks(body);
+        fs.writeFileSync(LINKS_FILE + '.tmp', JSON.stringify(links));
+        fs.renameSync(LINKS_FILE + '.tmp', LINKS_FILE);
+      } catch (_) {}
       return json(res, 200, { ok: true, size: body.length });
     } catch (e) { return json(res, 500, { error: String(e) }); }
   }
@@ -247,6 +348,14 @@ const server = http.createServer(async (req, res) => {
   if (m === 'GET' && url === '/api/me') return json(res, 200, { user: sess.username, isAdmin: sess.isAdmin });
   if (m === 'GET' && url === '/cuenta') return serveFile(res, 'cuenta.html', 'text/html; charset=utf-8');
   if (m === 'GET' && url === '/admin') { if (!sess.isAdmin) return redirect(res, '/'); return serveFile(res, 'admin.html', 'text/html; charset=utf-8'); }
+
+  if (m === 'GET' && url === '/api/hyperlinks') {
+    try {
+      if (!fs.existsSync(LINKS_FILE)) return json(res, 200, {});
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(fs.readFileSync(LINKS_FILE));
+    } catch (e) { return json(res, 500, { error: String(e) }); }
+  }
 
   if (m === 'GET' && url === '/api/data') {
     if (!fs.existsSync(DATA_FILE)) return json(res, 404, { error: 'Todavía no hay datos cargados' });
