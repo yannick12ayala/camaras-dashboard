@@ -511,12 +511,7 @@
   <!-- INSTALACION -->
   <div class="section-label">Estado de instalación</div>
   <div class="charts-grid">
-    <div class="chart-card">
-      <div class="chart-title">Progreso de gabinetes</div>
-      <div class="chart-subtitle">Instalados vs pendientes</div>
-      <div id="progressGab"></div>
-    </div>
-    <div class="chart-card">
+    <div class="chart-card span2">
       <div class="chart-title">Progreso de instalación</div>
       <div class="chart-subtitle">Etapas del proyecto: instalado vs total</div>
       <div id="instProgress" style="padding-top:6px"></div>
@@ -862,7 +857,6 @@ function buildCharts(d) {
   document.getElementById('mCol').textContent      = d.col;
   document.getElementById('puntosCount').textContent = d.total+' cámaras';
 
-  buildProgress(d);
   buildRelevamiento(d);
   buildRelevLoc(d);
   buildISPCards(d.isp);
