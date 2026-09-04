@@ -582,11 +582,7 @@ async function bootstrap() {
       };
     });
 
-    // Re-poblar el <select> de localidades (venía vacío porque DATA estaba vacío al cargar el HTML)
-    uniq(DATA.map(r => r.loc)).forEach(l =>
-      $('fLoc').insertAdjacentHTML('beforeend', '<option value="' + l + '">' + l + '</option>')
-    );
-    initFromData();
+    initFromData(); // pobla filtros, listeners y renderiza la tabla
   } catch (e) {
     console.error('[isp] Error cargando datos:', e);
     $('rowCount').textContent = 'Error: no se pudo cargar los datos (' + e.message + ')';
