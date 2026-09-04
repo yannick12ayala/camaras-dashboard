@@ -517,9 +517,9 @@
       <div id="progressGab"></div>
     </div>
     <div class="chart-card">
-      <div class="chart-title">Equipamiento auxiliar</div>
-      <div class="chart-subtitle">Unidades totales por tipo</div>
-      <div class="chart-wrap" style="height:220px"><canvas id="chartEquip" role="img" aria-label="Equipamiento">Equipamiento.</canvas></div>
+      <div class="chart-title">Progreso de instalación</div>
+      <div class="chart-subtitle">Etapas del proyecto: instalado vs total</div>
+      <div id="instProgress" style="padding-top:6px"></div>
     </div>
     <div class="chart-card span2">
       <div class="chart-title">Cámaras fijas vs LPR por localidad</div>
@@ -635,6 +635,8 @@ function processRows(rows) {
     gab:          findCol(keys,'Cantidad de Gabinetes','Gabinetes'),
     col:          findCol(keys,'Cantidad de Columnas','Columnas'),
     instGab:      findCol(keys,'Instalación Gabinete'),
+    estadoCol:    findCol(keys,'Estado Instalación de Columna','Estado Instalacion de Columna'),
+    estadoCam:    findCol(keys,'Estado Instalación Cámara','Estado Instalacion Camara'),
     poe:          findCol(keys,'POE'),
     grua:         findCol(keys,'GRUA'),
     b100:         findCol(keys,'100 cm','Brazo de 100'),
@@ -693,13 +695,21 @@ function processRows(rows) {
   const relevados = k.relevado ? dataRows.filter(r => n(r[k.relevado]) === 1).length : 0;
   const noRelevados = totalPuntos - relevados;
 
-  const instGabCount = k.instGab
-    ? dataRows.filter(r => r[k.instGab] && r[k.instGab] !== 0 && String(r[k.instGab]).trim() !== '').length : 0;
+  // Progreso de instalación: para cada etapa, cuenta cuántas UNIDADES están
+  // instaladas (suma la cantidad de gabinetes/columnas/cámaras del punto cuando
+  // ese estado está marcado). Sirve para números tipo "12 de 696 instaladas".
+  const isDone = v => v && v !== 0 && String(v).trim() !== '' && String(v).trim() !== '0';
+  const instGabCount = k.instGab ? dataRows.filter(r => isDone(r[k.instGab])).length : 0;
+  const camInstaladas = (k.estadoCam && k.total)
+    ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCam]) ? n(r[k.total]) : 0), 0) : 0;
+  const colInstaladas = (k.estadoCol && k.col)
+    ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCol]) ? n(r[k.col]) : 0), 0) : 0;
 
   buildCharts({
     total: sum(k.total), fijas: sum(k.fijas), lpr: sum(k.lpr), domos: sum(k.domos),
     domosLargo: sum(k.domosLargo), domosMulti: sum(k.domosMulti), domosDoble: sum(k.domosDoble),
     gab: sum(k.gab), col: sum(k.col), instalados: instGabCount,
+    colInstaladas, camInstaladas,
     poe: sum(k.poe), grua: sum(k.grua), brazo100: sum(k.b100), brazo60: sum(k.b60), jaula: sum(k.jaula),
     localidades: locs,
     mb: Object.keys(mbDist).length ? mbDist : {},
@@ -908,12 +918,25 @@ function buildCharts(d) {
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.raw} cámaras`}}},scales:{x:{beginAtZero:true,ticks:{color:C.text2,font:{size:11}},grid:{color:C.grid}},y:{ticks:{color:C.text2,font:{size:11}},grid:{display:false}}}}
   });
 
-  // Equipamiento
-  charts.equip = new Chart(document.getElementById('chartEquip'), {
-    type:'bar',
-    data:{labels:['POE','GRUA','Brazo 100cm','Brazo 60cm','JAULA'],datasets:[{label:'Cantidad',data:[d.poe,d.grua,d.brazo100,d.brazo60,d.jaula],backgroundColor:[C.amber,C.purple,C.teal,C.coral,C.text2],borderRadius:4,borderSkipped:false}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.raw} unidades`}}},scales:{x:{ticks:{color:C.text2,font:{size:11}},grid:{display:false}},y:{beginAtZero:true,ticks:{color:C.text2,font:{size:11}},grid:{color:C.grid}}}}
-  });
+  // Progreso de instalación (Gabinetes / Columnas / Cámaras)
+  const instBox = document.getElementById('instProgress');
+  if (instBox) {
+    const rows = [
+      { label: 'Gabinetes', done: d.instalados,    total: d.gab, color: C.blue  },
+      { label: 'Columnas',  done: d.colInstaladas, total: d.col, color: C.teal  },
+      { label: 'Cámaras',   done: d.camInstaladas, total: d.total, color: C.green },
+    ];
+    instBox.innerHTML = rows.map(r => {
+      const pct = r.total > 0 ? Math.round(r.done / r.total * 100) : 0;
+      return `<div class="progress-row">
+        <div class="progress-meta">
+          <span class="name">${r.label}</span>
+          <span class="vals">${r.done} / ${r.total} (${pct}%)</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${r.color}"></div></div>
+      </div>`;
+    }).join('');
+  }
 
   // Stack
   charts.stack = new Chart(document.getElementById('chartStack'), {
