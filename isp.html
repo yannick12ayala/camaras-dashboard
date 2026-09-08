@@ -305,10 +305,13 @@ const TYPES = [
 
 // Seed initial SI/NO from Excel values
 function seed(r){
+  // Semilla inicial: TODO en NO/rojo — nada está instalado todavía.
+  // Los valores del Excel (r.cols, r.gab, r.conect) son "planificados", no "instalados".
+  // Los ISP marcan SÍ manualmente cuando avanza la instalación.
   return {
-    postes:    r.cols > 0     ? 'si' : 'no',
-    gabinete:  r.gab  > 0     ? 'si' : 'no',
-    conect:    r.conect > 0   ? 'si' : 'no',
+    postes:   'no',
+    gabinete: 'no',
+    conect:   'no',
   };
 }
 const STATUS_COLS = ['postes','gabinete','conect'];
