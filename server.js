@@ -282,10 +282,19 @@ function getMailer() {
     return null;
   }
 }
-async function notifyEstadoChange({ id, prev, next, by, cam }) {
+const MOTIVO_LABEL = {
+  onu_alarmada:  'ONU alarmada',
+  fibra_cortada: 'Fibra cortada',
+  sin_energia:   'Sin energía',
+  vandalizado:   'Vandalizado',
+};
+async function notifyEstadoChange({ id, prev, next, by, cam, motivo }) {
   const label = { con: 'Con servicio', sin: 'Sin servicio' };
   const prevL = label[prev] || 'sin dato';
-  const nextL = label[next] || 'sin dato';
+  let nextL = label[next] || 'sin dato';
+  if (next === 'sin' && motivo && MOTIVO_LABEL[motivo]) {
+    nextL += ' · ' + MOTIVO_LABEL[motivo];
+  }
   const line = `[notify] ID ${id}: ${prevL} → ${nextL}  (por ${by})`;
   console.log(line);
   const mailer = getMailer();
@@ -441,7 +450,11 @@ const server = http.createServer(async (req, res) => {
     const value = body.value == null ? '' : String(body.value).trim();
     if (!id || !field) return json(res, 400, { error: 'faltan id o field' });
     // Campos permitidos: cerrados (lista de valores) o libres (texto acotado)
-    const closed = { estadoConect: ['con', 'sin'] };
+    const closed = {
+      estadoConect: ['con', 'sin'],
+      // Motivo cuando estadoConect = 'sin'. '' = limpiar (cuando vuelve a 'con').
+      motivoSinServicio: ['onu_alarmada', 'fibra_cortada', 'sin_energia', 'vandalizado', ''],
+    };
     const freeText = { numServicio: 60 }; // { campo: maxLen }
     if (closed[field]) {
       if (!closed[field].includes(value)) return json(res, 400, { error: 'valor no permitido para ' + field });
@@ -459,7 +472,8 @@ const server = http.createServer(async (req, res) => {
     appendLog({ ts: new Date().toISOString(), by: sess.username, id, field, prev, next: value });
     // Disparar notificación por email para estadoConect (async, no bloquea la respuesta)
     if (field === 'estadoConect' && prev !== value) {
-      notifyEstadoChange({ id, prev, next: value, by: sess.username, cam: body.cam || null })
+      const motivo = all[id].motivoSinServicio && all[id].motivoSinServicio.value;
+      notifyEstadoChange({ id, prev, next: value, by: sess.username, cam: body.cam || null, motivo })
         .catch(e => console.log('[notify] error:', e.message));
     }
     return json(res, 200, { ok: true, prev, next: value });

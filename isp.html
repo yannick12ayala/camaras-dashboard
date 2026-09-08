@@ -187,6 +187,26 @@ td.status-col .status{margin:0 auto}
 /* Columna ISP (readonly, del Excel) */
 td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);white-space:nowrap}
 
+/* Menú desplegable de motivos "Sin servicio" */
+.estado-wrap{position:relative; display:inline-block}
+.estado-menu{
+  position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
+  min-width:180px; background:var(--surf); border:1px solid var(--line);
+  border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.15);
+  padding:6px; z-index:20;
+}
+.estado-menu .m-title{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; padding:5px 10px 3px}
+.estado-menu button{
+  display:block; width:100%; text-align:left; padding:8px 12px; margin:0;
+  background:transparent; border:0; border-radius:6px; cursor:pointer;
+  font:inherit; font-size:13px; color:var(--ink);
+}
+.estado-menu button:hover{background:var(--bad-soft); color:var(--bad)}
+.estado-motivo{
+  display:block; font-size:10px; color:var(--muted);
+  margin-top:2px; font-family:'Inter',sans-serif; font-weight:400;
+}
+
 /* Botón "Volver al dashboard" en el header */
 .back-btn{
   display:inline-flex; align-items:center; gap:6px;
@@ -452,16 +472,32 @@ function numServicioCell(id) {
   return '<td class="num-servicio"><input class="num-servicio-input" data-num-id="' + id +
          '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="60"></td>';
 }
+const MOTIVOS = [
+  { key: 'onu_alarmada',  label: 'ONU alarmada' },
+  { key: 'fibra_cortada', label: 'Fibra cortada' },
+  { key: 'sin_energia',   label: 'Sin energía' },
+  { key: 'vandalizado',   label: 'Vandalizado' },
+];
+const MOTIVOS_MAP = MOTIVOS.reduce((m, x) => (m[x.key] = x.label, m), {});
+function getMotivo(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].motivoSinServicio;
+  return s && s.value ? s.value : '';
+}
 function stEstadoCell(id) {
   const val = getEstado(id); // 'con' | 'sin'
   const isOn = val === 'con';
   const cls = isOn ? 'si' : 'no';
+  const motivo = !isOn ? getMotivo(id) : '';
+  const motivoTxt = motivo && MOTIVOS_MAP[motivo] ? MOTIVOS_MAP[motivo] : '';
   const label = isOn ? 'CON SERVICIO' : 'SIN SERVICIO';
+  const motivoHtml = motivoTxt ? '<span class="estado-motivo">' + motivoTxt + '</span>' : '';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].estadoConect;
-  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+  const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
                 : ('Clic para marcar ' + (isOn ? 'SIN' : 'CON') + ' servicio');
-  return '<td class="status-col"><button class="status estado-conect ' + cls +
-         '" data-estado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
+  return '<td class="status-col"><div class="estado-wrap">' +
+         '<button class="status estado-conect ' + cls +
+         '" data-estado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + motivoHtml + '</button>' +
+         '</div></td>';
 }
 
 function render(){
@@ -585,7 +621,7 @@ async function toggleHistoryRow(idTd) {
   tr.after(holder);
 
   try {
-    const resp = await fetch('/api/status/log?id=' + encodeURIComponent(id) + '&field=estadoConect', { cache: 'no-store' });
+    const resp = await fetch('/api/status/log?id=' + encodeURIComponent(id), { cache: 'no-store' });
     if (resp.status === 401) { location.href = '/login'; return; }
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const entries = await resp.json();
@@ -594,16 +630,35 @@ async function toggleHistoryRow(idTd) {
       cell.innerHTML = '<div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty">Sin cambios registrados todavía.</div>';
       return;
     }
-    const badge = v => {
-      const cls = v === 'con' ? 'con' : (v === 'sin' ? 'sin' : '');
-      const label = v === 'con' ? 'Con servicio' : v === 'sin' ? 'Sin servicio' : (v || '—');
-      return '<span class="h-badge ' + cls + '">' + label + '</span>';
+    const badge = (v, kind) => {
+      // kind: 'estado' | 'motivo' | 'texto'
+      const empty = (v === '' || v == null) ? '—' : null;
+      if (empty) return '<span class="h-badge">' + empty + '</span>';
+      if (kind === 'estado') {
+        const cls = v === 'con' ? 'con' : (v === 'sin' ? 'sin' : '');
+        const label = v === 'con' ? 'Con servicio' : v === 'sin' ? 'Sin servicio' : v;
+        return '<span class="h-badge ' + cls + '">' + label + '</span>';
+      }
+      if (kind === 'motivo') {
+        const label = MOTIVOS_MAP[v] || v;
+        return '<span class="h-badge sin">' + label + '</span>';
+      }
+      return '<span class="h-badge">' + v + '</span>';
+    };
+    const fieldLabel = {
+      estadoConect:     'Estado',
+      motivoSinServicio: 'Motivo',
+      numServicio:      'N° servicio',
     };
     const rows = entries.map(e => {
       const when = new Date(e.ts).toLocaleString('es-AR');
+      const kind = e.field === 'estadoConect' ? 'estado' :
+                   e.field === 'motivoSinServicio' ? 'motivo' : 'texto';
+      const fLabel = fieldLabel[e.field] || e.field;
       return '<tr>' +
         '<td class="h-time">' + when + '</td>' +
-        '<td>' + badge(e.prev) + '<span class="h-arrow">→</span>' + badge(e.next) + '</td>' +
+        '<td><span style="color:var(--muted);font-size:11px">' + fLabel + ':</span> ' +
+          badge(e.prev, kind) + '<span class="h-arrow">→</span>' + badge(e.next, kind) + '</td>' +
         '<td class="h-by">por <b>' + (e.by || '—') + '</b></td>' +
         '</tr>';
     }).join('');
@@ -660,6 +715,42 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// Guarda estado + motivo (2 POSTs: primero motivo, después estado para que el
+// email tome el motivo actualizado). Repinta la celda in-place.
+async function setEstadoSinMotivo(id, nextEstado, motivo) {
+  const row = DATA.find(r => r.id === id);
+  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
+  try {
+    // 1) Guardar el motivo (o limpiarlo si vuelve a CON)
+    await fetch('/api/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'motivoSinServicio', value: motivo || '' }),
+    });
+    // 2) Guardar el nuevo estado
+    const resp = await fetch('/api/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'estadoConect', value: nextEstado, cam }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    // Cache local
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].estadoConect     = { value: nextEstado, by: '(vos)', at: new Date().toISOString() };
+    window.SERVER_STATUS[id].motivoSinServicio = { value: motivo || '', by: '(vos)', at: new Date().toISOString() };
+    // Re-render solo la celda (evita full re-render)
+    const btn = document.querySelector('[data-estado-id="' + CSS.escape(id) + '"]');
+    if (btn) {
+      const td = btn.closest('td');
+      if (td) td.outerHTML = stEstadoCell(id);
+    }
+  } catch (err) {
+    alert('No se pudo guardar el estado: ' + err.message);
+  }
+}
+
 // Delegated click handler for toggles
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.status');
@@ -669,35 +760,43 @@ document.addEventListener('click', async (e) => {
   const estadoId = btn.dataset.estadoId;
   if (estadoId) {
     const cur = getEstado(estadoId);
-    const nxt = cur === 'con' ? 'sin' : 'con';
-    const row = DATA.find(r => r.id === estadoId);
-    btn.disabled = true;
-    try {
-      const resp = await fetch('/api/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: estadoId, field: 'estadoConect', value: nxt,
-          cam: row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null,
-        }),
-      });
-      if (resp.status === 401) { location.href = '/login'; return; }
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      // Actualizar cache local
-      window.SERVER_STATUS = window.SERVER_STATUS || {};
-      window.SERVER_STATUS[estadoId] = window.SERVER_STATUS[estadoId] || {};
-      window.SERVER_STATUS[estadoId].estadoConect = { value: nxt, by: '(vos)', at: new Date().toISOString() };
-      // In-place update visual
-      btn.classList.remove('si','no');
-      btn.classList.add(nxt === 'con' ? 'si' : 'no');
-      btn.lastChild.textContent = nxt === 'con' ? 'CON SERVICIO' : 'SIN SERVICIO';
-      btn.title = 'Clic para marcar ' + (nxt === 'con' ? 'SIN' : 'CON') + ' servicio';
-    } catch (err) {
-      alert('No se pudo guardar el estado: ' + err.message);
-    } finally {
-      btn.disabled = false;
+    const wrap = btn.closest('.estado-wrap');
+    // ¿Ya hay un menú abierto para este botón? Lo cerramos.
+    const existing = wrap && wrap.querySelector('.estado-menu');
+    if (existing) { existing.remove(); return; }
+    // Cerrar cualquier otro menú abierto
+    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
+
+    if (cur === 'con') {
+      // Está CON SERVICIO → mostrar menú con los 4 motivos para pasar a SIN
+      const menu = document.createElement('div');
+      menu.className = 'estado-menu';
+      menu.innerHTML =
+        '<div class="m-title">Motivo del corte</div>' +
+        MOTIVOS.map(m => '<button data-motivo="' + m.key + '">' + m.label + '</button>').join('');
+      wrap.appendChild(menu);
+      return;
     }
+    // Está SIN SERVICIO → vuelve a CON (limpia el motivo primero)
+    await setEstadoSinMotivo(estadoId, 'con', '');
     return;
+  }
+
+  // ── Click en una opción de motivo del menú ──
+  const motivoBtn = e.target.closest && e.target.closest('.estado-menu [data-motivo]');
+  if (motivoBtn) {
+    const wrap = motivoBtn.closest('.estado-wrap');
+    const estadoBtn = wrap && wrap.querySelector('[data-estado-id]');
+    if (!estadoBtn) return;
+    const id = estadoBtn.dataset.estadoId;
+    const motivo = motivoBtn.dataset.motivo;
+    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
+    await setEstadoSinMotivo(id, 'sin', motivo);
+    return;
+  }
+  // Click afuera del menú → cerrar
+  if (!e.target.closest('.estado-menu') && !e.target.closest('[data-estado-id]')) {
+    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
   }
 
   // ── Toggles SÍ/NO tradicionales (localStorage) ──
