@@ -397,8 +397,8 @@
   <!-- AVANCE DE CONECTIVIDAD POR ISP (viene del portal ISP) -->
   <div class="section-label">Avance de conectividad por ISP</div>
   <div class="chart-card">
-    <div class="chart-title">Puntos con servicio activo</div>
-    <div class="chart-subtitle">Cuántos puntos de cada ISP están efectivamente prestando servicio (viene del portal ISP)</div>
+    <div class="chart-title">Instalada vs con servicio activo</div>
+    <div class="chart-subtitle">Anillo exterior: conectividad instalada · Anillo interior: puntos que están prestando servicio</div>
     <div id="avanceIspGrid" class="donuts-grid"></div>
   </div>
 
@@ -827,8 +827,7 @@ function makeLegend(id, items) {
   ).join('');
 }
 
-// Donut chico (para Avance ISP / Avance Instalación). Crea todo el DOM
-// dentro del contenedor y devuelve el canvas para engancharle un Chart.
+// Donut simple: un solo anillo (Avance de instalación).
 function renderDonut(container, key, name, done, total, color) {
   const pct = total > 0 ? Math.round(done / total * 100) : 0;
   const pctColor = color || (pct >= 90 ? '#3ecf8e' : pct >= 50 ? '#f5a623' : pct > 0 ? '#4d8ef0' : '#555a70');
@@ -852,6 +851,66 @@ function renderDonut(container, key, name, done, total, color) {
   });
 }
 
+// Donut doble anillo (para Avance ISP): exterior = instalados, interior = con servicio.
+function renderDualDonut(container, key, name, installed, withService, total, color) {
+  const pctInst = total > 0 ? Math.round(installed / total * 100) : 0;
+  const pctSrv  = total > 0 ? Math.round(withService / total * 100) : 0;
+  const colOut = color || '#4d8ef0';
+  const colIn  = pctSrv >= 90 ? '#3ecf8e' : pctSrv >= 50 ? '#f5a623' : pctSrv > 0 ? colOut : '#555a70';
+  const card = document.createElement('div');
+  card.className = 'donut-card';
+  card.innerHTML =
+    '<div class="d-name">' + name + '</div>' +
+    '<div class="d-wrap">' +
+      '<canvas id="donut_' + key + '"></canvas>' +
+      '<div class="d-center">' +
+        '<div class="d-pct" style="color:' + colIn + ';font-size:20px">' + pctSrv + '%</div>' +
+        '<div class="d-label" style="color:' + colIn + '">c/ servicio</div>' +
+        '<div class="d-label" style="color:var(--text3);margin-top:3px">Inst: ' + pctInst + '%</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="d-values">' +
+      '<span style="color:' + colOut + '">' + installed + '</span> inst · ' +
+      '<span style="color:' + colIn + '">' + withService + '</span> serv · ' +
+      '<span style="color:var(--text3)">' + total + ' total</span>' +
+    '</div>';
+  container.appendChild(card);
+  charts['donut_' + key] = new Chart(card.querySelector('canvas'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Instalados','Sin instalar','Con servicio','Sin servicio'],
+      datasets: [
+        { // Anillo EXTERIOR = instalados
+          data: [installed, Math.max(0, total - installed)],
+          backgroundColor: [colOut, '#1e2335'],
+          borderWidth: 2, borderColor: '#181c27',
+          weight: 1,
+        },
+        { // Anillo INTERIOR = con servicio
+          data: [withService, Math.max(0, total - withService)],
+          backgroundColor: [colIn, '#1e2335'],
+          borderWidth: 2, borderColor: '#181c27',
+          weight: 1,
+        },
+      ]
+    },
+    options: {
+      responsive: false, cutout: '55%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: ctx => {
+            const ds = ctx.datasetIndex;
+            const val = ctx.raw;
+            if (ds === 0) return ' ' + (ctx.dataIndex === 0 ? 'Instalados: ' : 'Sin instalar: ') + val;
+            return ' ' + (ctx.dataIndex === 0 ? 'Con servicio: ' : 'Sin servicio: ') + val;
+          }
+        } }
+      }
+    }
+  });
+}
+
 // Avance de conectividad por ISP (usa estadoConect del portal ISP)
 function buildAvanceISP(d) {
   const cont = document.getElementById('avanceIspGrid');
@@ -866,10 +925,11 @@ function buildAvanceISP(d) {
   }
   isps.forEach(name => {
     const stats = d.isp[name] || { total: 0 };
-    const total = stats.total || 0;
-    const activos = stats.conServicio || 0; // los que están 'con servicio' según el portal ISP
+    const total       = stats.total       || 0;
+    const installed   = stats.conectadas  || 0; // conectividad instalada (Excel: Estado de Conectividadad = 1)
+    const withService = stats.conServicio || 0; // con servicio activo (portal ISP: estadoConect = 'con')
     const color = (typeof ISP_COLORS !== 'undefined' && ISP_COLORS[name]) || '#4d8ef0';
-    renderDonut(cont, 'isp_' + name.replace(/\W/g, '_'), name, activos, total, color);
+    renderDualDonut(cont, 'isp_' + name.replace(/\W/g, '_'), name, installed, withService, total, color);
   });
 }
 
