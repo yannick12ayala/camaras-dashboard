@@ -183,6 +183,20 @@ td.status-col .status{margin:0 auto}
   .tbl-scroll{max-height:none}
   .status{min-width:56px; font-size:11px}
 }
+
+/* Columna ISP (readonly, del Excel) */
+td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);white-space:nowrap}
+
+/* Columna N° de servicio (input editable) */
+td.num-servicio{padding:6px 8px}
+.num-servicio-input{
+  width:110px; padding:5px 8px; border:1px solid var(--line); border-radius:5px;
+  background:var(--bg); color:var(--ink); font:inherit; font-size:12px;
+  font-family:'JetBrains Mono',monospace; outline:none; transition:border-color .15s, background .3s;
+}
+.num-servicio-input:focus{border-color:var(--accent); background:var(--surf)}
+.num-servicio-input.saving{opacity:.55}
+.num-servicio-input.saved{border-color:var(--good); background:var(--good-soft)}
 </style>
 
 <div class="wrap">
@@ -241,7 +255,9 @@ td.status-col .status{margin:0 auto}
           <th class="status-col" data-k="postes">Postes</th>
           <th class="status-col" data-k="gabinete">Gabinete</th>
           <th data-k="gabNum">N° Gabinete</th>
+          <th data-k="isp">ISP</th>
           <th class="status-col" data-k="conect">Conectividad</th>
+          <th data-k="numServicio">N° de servicio</th>
           <th class="status-col" data-k="estadoConect">Estado de conectividad</th>
           <th class="no-sort">Plano</th>
         </tr></thead>
@@ -389,6 +405,20 @@ function getEstado(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].estadoConect;
   return s && s.value ? s.value : 'sin'; // por defecto: 'sin' servicio
 }
+// N° de servicio: input editable, persistente en el server
+function getNumServicio(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].numServicio;
+  return s && s.value != null ? String(s.value) : '';
+}
+function numServicioCell(id) {
+  const val = getNumServicio(id);
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].numServicio;
+  const tip = s ? ('Último cambio: ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+                : 'Ingresá el número de servicio y hacé Tab o Enter';
+  const esc = (val || '').replace(/"/g, '&quot;');
+  return '<td class="num-servicio"><input class="num-servicio-input" data-num-id="' + id +
+         '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="60"></td>';
+}
 function stEstadoCell(id) {
   const val = getEstado(id); // 'con' | 'sin'
   const isOn = val === 'con';
@@ -485,13 +515,56 @@ function render(){
       ${stCell('postes')}
       ${stCell('gabinete')}
       ${gabNumCell}
+      <td class="isp">${r.isp || '—'}</td>
       ${stCell('conect')}
+      ${numServicioCell(r.id)}
       ${stEstadoCell(r.id)}
       <td>${pdf}</td>
     </tr>`;
   }).join('');
   $('tbody').innerHTML = html;
 }
+
+// N° de servicio: guardar al perder foco (blur) o al Enter
+async function saveNumServicio(input) {
+  const id = input.dataset.numId;
+  if (!id) return;
+  const value = input.value.trim();
+  const prev = getNumServicio(id);
+  if (value === prev) return; // sin cambio, no hacemos nada
+  input.disabled = true;
+  input.classList.add('saving');
+  try {
+    const resp = await fetch('/api/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'numServicio', value }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].numServicio = { value, by: '(vos)', at: new Date().toISOString() };
+    input.classList.remove('saving');
+    input.classList.add('saved');
+    setTimeout(() => input.classList.remove('saved'), 1200);
+  } catch (err) {
+    alert('No se pudo guardar el N° de servicio: ' + err.message);
+    input.value = prev; // revertir
+  } finally {
+    input.disabled = false;
+  }
+}
+document.addEventListener('blur', (e) => {
+  const inp = e.target.closest && e.target.closest('.num-servicio-input');
+  if (inp) saveNumServicio(inp);
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const inp = e.target.closest && e.target.closest('.num-servicio-input');
+    if (inp) { inp.blur(); }
+  }
+});
 
 // Delegated click handler for toggles
 document.addEventListener('click', async (e) => {
@@ -607,6 +680,7 @@ async function bootstrap() {
       colsQ:  findCol('Cantidad de Columnas','Columnas'),
       poe:    findCol('POE'),
       conect: findCol('Estado de Conectividad','Conectividadad','Conectividad'),
+      isp:    findCol('ISP'),
       pdf:    findCol('PDF URL','PDF_URL'),
     };
     const asNum = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
@@ -632,6 +706,7 @@ async function bootstrap() {
         cols:   asNum(r[K.colsQ]),
         poe:    asNum(r[K.poe]),
         conect: asNum(r[K.conect]),
+        isp:    asStr(r[K.isp]),
         coord:  asStr(r[latKey]),
         coord2: asStr(r[lonKey]),
         pdf:    links[id] || (asStr(r[K.pdf]).startsWith('http') ? asStr(r[K.pdf]) : ''),

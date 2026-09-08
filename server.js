@@ -438,12 +438,18 @@ const server = http.createServer(async (req, res) => {
     const body = await readJson(req);
     const id = String(body.id || '').trim();
     const field = String(body.field || '').trim();
-    const value = String(body.value || '').trim();
-    if (!id || !field || !value) return json(res, 400, { error: 'faltan id/field/value' });
-    // Solo aceptamos por ahora un set acotado
-    const allowed = { estadoConect: ['con', 'sin'] };
-    if (!allowed[field] || !allowed[field].includes(value)) {
-      return json(res, 400, { error: 'field/value no permitidos' });
+    const value = body.value == null ? '' : String(body.value).trim();
+    if (!id || !field) return json(res, 400, { error: 'faltan id o field' });
+    // Campos permitidos: cerrados (lista de valores) o libres (texto acotado)
+    const closed = { estadoConect: ['con', 'sin'] };
+    const freeText = { numServicio: 60 }; // { campo: maxLen }
+    if (closed[field]) {
+      if (!closed[field].includes(value)) return json(res, 400, { error: 'valor no permitido para ' + field });
+    } else if (field in freeText) {
+      if (typeof value !== 'string') return json(res, 400, { error: 'value debe ser string' });
+      if (value.length > freeText[field]) return json(res, 400, { error: 'value demasiado largo' });
+    } else {
+      return json(res, 400, { error: 'field no permitido' });
     }
     const all = loadStatuses();
     const prev = (all[id] && all[id][field] && all[id][field].value) || null;
