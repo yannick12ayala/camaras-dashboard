@@ -753,6 +753,24 @@ async function setEstadoSinMotivo(id, nextEstado, motivo) {
 
 // Delegated click handler for toggles
 document.addEventListener('click', async (e) => {
+  // ── Click en una opción del menú de motivos (tiene que ir ANTES del guard .status) ──
+  const motivoBtn = e.target.closest && e.target.closest('.estado-menu [data-motivo]');
+  if (motivoBtn) {
+    const wrap = motivoBtn.closest('.estado-wrap');
+    const estadoBtnRef = wrap && wrap.querySelector('[data-estado-id]');
+    if (!estadoBtnRef) return;
+    const id = estadoBtnRef.dataset.estadoId;
+    const motivo = motivoBtn.dataset.motivo;
+    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
+    await setEstadoSinMotivo(id, 'sin', motivo);
+    return;
+  }
+  // Click afuera del menú → cerrar (también antes del guard)
+  if (document.querySelector('.estado-menu') &&
+      !e.target.closest('.estado-menu') && !e.target.closest('[data-estado-id]')) {
+    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
+  }
+
   const btn = e.target.closest('.status');
   if(!btn) return;
 
@@ -780,23 +798,6 @@ document.addEventListener('click', async (e) => {
     // Está SIN SERVICIO → vuelve a CON (limpia el motivo primero)
     await setEstadoSinMotivo(estadoId, 'con', '');
     return;
-  }
-
-  // ── Click en una opción de motivo del menú ──
-  const motivoBtn = e.target.closest && e.target.closest('.estado-menu [data-motivo]');
-  if (motivoBtn) {
-    const wrap = motivoBtn.closest('.estado-wrap');
-    const estadoBtn = wrap && wrap.querySelector('[data-estado-id]');
-    if (!estadoBtn) return;
-    const id = estadoBtn.dataset.estadoId;
-    const motivo = motivoBtn.dataset.motivo;
-    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
-    await setEstadoSinMotivo(id, 'sin', motivo);
-    return;
-  }
-  // Click afuera del menú → cerrar
-  if (!e.target.closest('.estado-menu') && !e.target.closest('[data-estado-id]')) {
-    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
   }
 
   // ── Toggles SÍ/NO tradicionales (localStorage) ──
