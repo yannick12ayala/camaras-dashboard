@@ -2,7 +2,8 @@
   "name": "camaras-dashboard",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "description": "Dashboard Proyecto Cámaras V — Municipalidad de Pilar. Datos vía OneDrive → Power Automate → Gist de GitHub.",
-  "dependencies": {}
+  "description": "Dashboard Proyecto Cámaras V — Municipalidad de Pilar. Self-hosted en servidor propio con login por perfiles.",
+  "dependencies": {
+    "nodemailer": "^6.9.14"
+  }
 }

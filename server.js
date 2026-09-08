@@ -21,6 +21,17 @@ const zlib = require('zlib');
 const PORT          = process.env.PORT || 8080;
 const DATA_FILE     = process.env.DATA_FILE || '/data/camaras.xlsx';
 const LINKS_FILE    = process.env.LINKS_FILE || '/data/hyperlinks.json';
+const STATUS_FILE   = process.env.STATUS_FILE || '/data/statuses.json';
+const STATUS_LOG    = process.env.STATUS_LOG  || '/data/status_log.jsonl';
+
+// SMTP para notificaciones (opcional; si SMTP_HOST no está, no envía)
+const SMTP_HOST     = process.env.SMTP_HOST || '';
+const SMTP_PORT     = parseInt(process.env.SMTP_PORT || '587', 10);
+const SMTP_USER     = process.env.SMTP_USER || '';
+const SMTP_PASS     = process.env.SMTP_PASS || '';
+const SMTP_FROM     = process.env.SMTP_FROM || SMTP_USER;
+const NOTIFY_TO     = (process.env.NOTIFY_TO || '').split(',').map(s => s.trim()).filter(Boolean);
+const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://camaraseg.pilar.gov.ar';
 const USERS_FILE    = process.env.USERS_FILE || '/data/users.json';
 const SECRET_FILE   = '/data/.session_secret';
 const UPLOAD_SECRET = process.env.UPLOAD_SECRET || '';
@@ -234,6 +245,75 @@ function normalizeUpload(body) {
   return body;
 }
 
+// ── Estados de puntos (persistentes, con auditoría) ──
+// Estructura /data/statuses.json:
+//   { "<id>": { "<field>": { value, by, at } } }
+// field es hoy solo "estadoConect" (con|sin), pero está pensado para agregar más.
+function loadStatuses() {
+  try { return JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')); } catch { return {}; }
+}
+function saveStatuses(obj) {
+  fs.mkdirSync(path.dirname(STATUS_FILE), { recursive: true });
+  const tmp = STATUS_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
+  fs.renameSync(tmp, STATUS_FILE);
+}
+function appendLog(entry) {
+  try {
+    fs.mkdirSync(path.dirname(STATUS_LOG), { recursive: true });
+    fs.appendFileSync(STATUS_LOG, JSON.stringify(entry) + '\n');
+  } catch (e) { console.log('[log] error:', e.message); }
+}
+
+// ── Notificación por email (lazy: solo si SMTP está configurado) ──
+let _mailer = null;
+function getMailer() {
+  if (_mailer) return _mailer;
+  if (!SMTP_HOST) return null;
+  try {
+    const nodemailer = require('nodemailer');
+    _mailer = nodemailer.createTransport({
+      host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_PORT === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+    return _mailer;
+  } catch (e) {
+    console.log('[mail] nodemailer no disponible:', e.message);
+    return null;
+  }
+}
+async function notifyEstadoChange({ id, prev, next, by, cam }) {
+  const label = { con: 'Con servicio', sin: 'Sin servicio' };
+  const prevL = label[prev] || 'sin dato';
+  const nextL = label[next] || 'sin dato';
+  const line = `[notify] ID ${id}: ${prevL} → ${nextL}  (por ${by})`;
+  console.log(line);
+  const mailer = getMailer();
+  if (!mailer || NOTIFY_TO.length === 0) return;
+  const subject = `Cámaras · ID ${id}: ${prevL} → ${nextL}`;
+  const dir = (cam && cam.dir) ? ` — ${cam.dir}` : '';
+  const html = `
+    <div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px">
+      <h2 style="margin:0 0 6px">Cambio de estado de conectividad</h2>
+      <p style="color:#555;margin:0 0 18px">Portal ISP · Proyecto Cámaras V</p>
+      <table style="border-collapse:collapse;font-size:14px">
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Punto</td><td><b>ID ${id}</b>${dir}</td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Estado anterior</td><td>${prevL}</td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Estado nuevo</td><td><b>${nextL}</b></td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Cambiado por</td><td>${by}</td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Cuando</td><td>${new Date().toLocaleString('es-AR')}</td></tr>
+      </table>
+      <p style="margin-top:22px"><a href="${DASHBOARD_URL}/isp" style="background:#4d8ef0;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;font-size:13px">Abrir Portal ISP</a></p>
+      <p style="color:#999;font-size:11px;margin-top:24px">Aviso automático — no responder a este correo.</p>
+    </div>`;
+  try {
+    await mailer.sendMail({ from: SMTP_FROM, to: NOTIFY_TO.join(','), subject, html });
+    console.log('[mail] enviado a', NOTIFY_TO.length, 'destinatarios');
+  } catch (e) {
+    console.log('[mail] error al enviar:', e.message);
+  }
+}
+
 const STATIC_PUBLIC = {
   '/login':         { file: 'login.html',    type: 'text/html; charset=utf-8' },
   '/manifest.json': { file: 'manifest.json', type: 'application/json; charset=utf-8' },
@@ -349,6 +429,44 @@ const server = http.createServer(async (req, res) => {
   if (m === 'GET' && url === '/cuenta') return serveFile(res, 'cuenta.html', 'text/html; charset=utf-8');
   if (m === 'GET' && url === '/admin') { if (!sess.isAdmin) return redirect(res, '/'); return serveFile(res, 'admin.html', 'text/html; charset=utf-8'); }
   if (m === 'GET' && (url === '/isp' || url === '/isp.html')) return serveFile(res, 'isp.html', 'text/html; charset=utf-8');
+
+  // Estados persistentes (compartidos): quién marcó, cuándo
+  if (m === 'GET' && url === '/api/status') {
+    return json(res, 200, loadStatuses());
+  }
+  if (m === 'POST' && url === '/api/status') {
+    const body = await readJson(req);
+    const id = String(body.id || '').trim();
+    const field = String(body.field || '').trim();
+    const value = String(body.value || '').trim();
+    if (!id || !field || !value) return json(res, 400, { error: 'faltan id/field/value' });
+    // Solo aceptamos por ahora un set acotado
+    const allowed = { estadoConect: ['con', 'sin'] };
+    if (!allowed[field] || !allowed[field].includes(value)) {
+      return json(res, 400, { error: 'field/value no permitidos' });
+    }
+    const all = loadStatuses();
+    const prev = (all[id] && all[id][field] && all[id][field].value) || null;
+    all[id] = all[id] || {};
+    all[id][field] = { value, by: sess.username, at: new Date().toISOString() };
+    saveStatuses(all);
+    appendLog({ ts: new Date().toISOString(), by: sess.username, id, field, prev, next: value });
+    // Disparar notificación por email para estadoConect (async, no bloquea la respuesta)
+    if (field === 'estadoConect' && prev !== value) {
+      notifyEstadoChange({ id, prev, next: value, by: sess.username, cam: body.cam || null })
+        .catch(e => console.log('[notify] error:', e.message));
+    }
+    return json(res, 200, { ok: true, prev, next: value });
+  }
+  // Historial (últimas N entradas del log)
+  if (m === 'GET' && url === '/api/status/log') {
+    try {
+      if (!fs.existsSync(STATUS_LOG)) return json(res, 200, []);
+      const raw = fs.readFileSync(STATUS_LOG, 'utf8').split('\n').filter(Boolean);
+      const last = raw.slice(-100).reverse().map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      return json(res, 200, last);
+    } catch (e) { return json(res, 500, { error: String(e) }); }
+  }
 
   if (m === 'GET' && url === '/api/hyperlinks') {
     try {

@@ -10,5 +10,13 @@ services:
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASS=${ADMIN_PASS}
       - SESSION_SECRET=${SESSION_SECRET:-}
+      # SMTP para notificaciones (opcionales; si SMTP_HOST está vacío, no envía)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - NOTIFY_TO=${NOTIFY_TO:-}
+      - DASHBOARD_URL=${DASHBOARD_URL:-https://camaraseg.pilar.gov.ar}
     volumes:
       - ./data:/data       # el Excel se guarda en ./data/camaras.xlsx (persistente)

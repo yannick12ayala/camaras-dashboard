@@ -242,6 +242,7 @@ td.status-col .status{margin:0 auto}
           <th class="status-col" data-k="gabinete">Gabinete</th>
           <th data-k="gabNum">N° Gabinete</th>
           <th class="status-col" data-k="conect">Conectividad</th>
+          <th class="status-col" data-k="estadoConect">Estado de conectividad</th>
           <th class="no-sort">Plano</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
@@ -383,6 +384,22 @@ function statusHTML(id, col, val, edited){
   const label = val === 'si' ? 'SÍ' : 'NO';
   return `<button class="status ${val}${edited?' edited':''}" data-id="${id}" data-col="${col}" title="Clic para cambiar a ${val==='si'?'NO':'SÍ'}"><span class="dot"></span>${label}</button>`;
 }
+// Estado de conectividad (persistente en el server, compartido entre todos)
+function getEstado(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].estadoConect;
+  return s && s.value ? s.value : 'sin'; // por defecto: 'sin' servicio
+}
+function stEstadoCell(id) {
+  const val = getEstado(id); // 'con' | 'sin'
+  const isOn = val === 'con';
+  const cls = isOn ? 'si' : 'no';
+  const label = isOn ? 'CON SERVICIO' : 'SIN SERVICIO';
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].estadoConect;
+  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+                : ('Clic para marcar ' + (isOn ? 'SIN' : 'CON') + ' servicio');
+  return '<td class="status-col"><button class="status estado-conect ' + cls +
+         '" data-estado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
+}
 
 function render(){
   const term = $('q').value.trim().toLowerCase();
@@ -469,6 +486,7 @@ function render(){
       ${stCell('gabinete')}
       ${gabNumCell}
       ${stCell('conect')}
+      ${stEstadoCell(r.id)}
       <td>${pdf}</td>
     </tr>`;
   }).join('');
@@ -476,14 +494,50 @@ function render(){
 }
 
 // Delegated click handler for toggles
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.status');
   if(!btn) return;
+
+  // ── Caso especial: Estado de Conectividad (persistente en el server) ──
+  const estadoId = btn.dataset.estadoId;
+  if (estadoId) {
+    const cur = getEstado(estadoId);
+    const nxt = cur === 'con' ? 'sin' : 'con';
+    const row = DATA.find(r => r.id === estadoId);
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/api/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: estadoId, field: 'estadoConect', value: nxt,
+          cam: row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null,
+        }),
+      });
+      if (resp.status === 401) { location.href = '/login'; return; }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      // Actualizar cache local
+      window.SERVER_STATUS = window.SERVER_STATUS || {};
+      window.SERVER_STATUS[estadoId] = window.SERVER_STATUS[estadoId] || {};
+      window.SERVER_STATUS[estadoId].estadoConect = { value: nxt, by: '(vos)', at: new Date().toISOString() };
+      // In-place update visual
+      btn.classList.remove('si','no');
+      btn.classList.add(nxt === 'con' ? 'si' : 'no');
+      btn.lastChild.textContent = nxt === 'con' ? 'CON SERVICIO' : 'SIN SERVICIO';
+      btn.title = 'Clic para marcar ' + (nxt === 'con' ? 'SIN' : 'CON') + ' servicio';
+    } catch (err) {
+      alert('No se pudo guardar el estado: ' + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+    return;
+  }
+
+  // ── Toggles SÍ/NO tradicionales (localStorage) ──
   const id = btn.dataset.id, col = btn.dataset.col;
   const row = DATA.find(r => r.id === id);
   const nxt = row._st[col] === 'si' ? 'no' : 'si';
   setStatus(id, col, nxt);
-  // In-place update (avoid full re-render for smoothness)
   btn.classList.remove('si','no');
   btn.classList.add(nxt);
   btn.querySelector('.dot');
@@ -510,9 +564,10 @@ render();
 // ── Carga de datos EN VIVO desde /api/data (mismo Excel que el dashboard principal) ──
 async function bootstrap() {
   try {
-    const [xlsxResp, linksResp] = await Promise.all([
+    const [xlsxResp, linksResp, statusResp] = await Promise.all([
       fetch('/api/data', { cache: 'no-store' }),
       fetch('/api/hyperlinks', { cache: 'no-store' }).catch(() => null),
+      fetch('/api/status', { cache: 'no-store' }).catch(() => null),
     ]);
     if (xlsxResp.status === 401) { location.href = '/login'; return; }
     if (!xlsxResp.ok) throw new Error('HTTP ' + xlsxResp.status);
@@ -521,6 +576,7 @@ async function bootstrap() {
     const ws  = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
     const links = linksResp && linksResp.ok ? await linksResp.json() : {};
+    window.SERVER_STATUS = statusResp && statusResp.ok ? await statusResp.json() : {};
 
     const cols = Object.keys(rows[0] || {});
     const latKey = cols.find(k => k.includes('COORD') || k.includes('Coord'));
