@@ -577,11 +577,24 @@ async function loadData() {
     const wb = XLSX.read(buf, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
     // Cargar en paralelo los hyperlinks reales (la col "PDF URL" del Excel es
-    // solo texto visible; los links de OneDrive los da /api/hyperlinks).
+    // solo texto visible; los links de OneDrive los da /api/hyperlinks) y los
+    // estados persistentes del portal ISP (para "Incidentes de conectividad").
     try {
-      const hr = await fetch('/api/hyperlinks', { cache: 'no-store' });
-      window.PDF_LINKS = hr.ok ? await hr.json() : {};
-    } catch { window.PDF_LINKS = {}; }
+      const [hr, sr, lr] = await Promise.all([
+        fetch('/api/hyperlinks',  { cache: 'no-store' }),
+        fetch('/api/status',       { cache: 'no-store' }),
+        fetch('/api/status/log?field=estadoConect', { cache: 'no-store' }),
+      ]);
+      window.PDF_LINKS     = hr && hr.ok ? await hr.json() : {};
+      window.SERVER_STATUS = sr && sr.ok ? await sr.json() : {};
+      const log            = lr && lr.ok ? await lr.json() : [];
+      // IDs que alguna vez pasaron a 'sin' (para marcar como "resueltos" si hoy están 'con')
+      window.IDS_QUE_TUVIERON_SIN = new Set(
+        log.filter(e => e.field === 'estadoConect' && e.next === 'sin').map(e => String(e.id))
+      );
+    } catch {
+      window.PDF_LINKS = {}; window.SERVER_STATUS = {}; window.IDS_QUE_TUVIERON_SIN = new Set();
+    }
     processRows(XLSX.utils.sheet_to_json(ws, { defval: 0 }));
     // Parse Observaciones sheet
     const obsSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('observ') || n.toLowerCase().includes('comentar'));
@@ -722,16 +735,48 @@ function processRows(rows) {
   // Actualizar mapa con datos del Excel
   updateMapFromRows(dataRows, k);
 
-  // Renderizar secciones de conectividad y problemas
-  const camRows = dataRows.map(r => ({
-    id: String(r[Object.keys(r)[0]]||'').replace('.0',''),
-    direccion: String(r[k.direccion]||''),
-    localidad: String(r[k.localidad]||''),
-    isp: String(r[k.isp]||''),
-    conectividad: parseFloat(r[k.conectividad])||0,
-    probConect: parseFloat(r[k.probConect])||0,
-    tipoProblem: String(r[k.tipoProblem]||'')
-  }));
+  // Renderizar secciones de conectividad y problemas.
+  // Los incidentes vienen del portal ISP (estado "Sin servicio" con motivo,
+  // persistente en el server). Se sobrescribe lo que traía el Excel para
+  // que ambos vistas queden coherentes.
+  const MOTIVO_LABELS = {
+    onu_alarmada:  'ONU alarmada',
+    fibra_cortada: 'Fibra cortada',
+    sin_energia:   'Sin energía',
+    vandalizado:   'Vandalizado',
+  };
+  const SS  = window.SERVER_STATUS || {};
+  const HAD = window.IDS_QUE_TUVIERON_SIN || new Set();
+  const camRows = dataRows.map(r => {
+    const id = String(r[Object.keys(r)[0]]||'').replace('.0','');
+    let probConect  = parseFloat(r[k.probConect])||0;
+    let tipoProblem = String(r[k.tipoProblem]||'');
+    // Override con datos del portal ISP si existen
+    const st = SS[id];
+    if (st) {
+      const estado = st.estadoConect && st.estadoConect.value;
+      const motivo = st.motivoSinServicio && st.motivoSinServicio.value;
+      if (estado === 'sin') {
+        probConect = 1;
+        tipoProblem = MOTIVO_LABELS[motivo] || tipoProblem || 'Sin servicio';
+      } else if (estado === 'con' && HAD.has(id)) {
+        probConect = 2;
+        // Mantener el último motivo si lo tenía
+        if (motivo && MOTIVO_LABELS[motivo]) tipoProblem = MOTIVO_LABELS[motivo];
+      }
+    } else if (HAD.has(id)) {
+      // Tenía historial pero no está en SS (raro): tratar como resuelto
+      probConect = 2;
+    }
+    return {
+      id,
+      direccion: String(r[k.direccion]||''),
+      localidad: String(r[k.localidad]||''),
+      isp: String(r[k.isp]||''),
+      conectividad: parseFloat(r[k.conectividad])||0,
+      probConect, tipoProblem,
+    };
+  });
   renderProblemas(camRows);
   renderConectivadProblemas(camRows);
   renderIspProblemas(camRows);
