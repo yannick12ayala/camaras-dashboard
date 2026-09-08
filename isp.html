@@ -187,6 +187,26 @@ td.status-col .status{margin:0 auto}
 /* Columna ISP (readonly, del Excel) */
 td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);white-space:nowrap}
 
+/* Columna ID: clickeable para desplegar historial */
+td.id{cursor:pointer; user-select:none; position:relative}
+td.id:hover{color:var(--accent)}
+td.id .caret{display:inline-block; margin-left:4px; color:var(--muted); font-size:9px; transition:transform .15s}
+td.id.open .caret{transform:rotate(90deg); color:var(--accent)}
+
+/* Fila expandida con el historial */
+tr.history-row td{background:var(--surf); padding:14px 18px; border-bottom:1px solid var(--line)}
+tr.history-row .h-title{font-weight:600; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px}
+tr.history-row .h-empty{color:var(--muted); font-size:12.5px; padding:6px 0}
+tr.history-row table{border-collapse:collapse; font-size:12.5px}
+tr.history-row table th{color:var(--muted); font-size:11px; text-align:left; padding:4px 14px 4px 0; font-weight:500}
+tr.history-row table td{background:transparent!important; padding:4px 14px 4px 0; border:none!important}
+tr.history-row .h-badge{display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:10px; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600}
+tr.history-row .h-badge.con{background:var(--good-soft); color:var(--good)}
+tr.history-row .h-badge.sin{background:var(--bad-soft); color:var(--bad)}
+tr.history-row .h-arrow{color:var(--muted); margin:0 6px}
+tr.history-row .h-time{font-family:'JetBrains Mono',monospace; color:var(--ink-2); font-size:11.5px}
+tr.history-row .h-by{color:var(--ink)}
+
 /* Columna N° de servicio (input editable) */
 td.num-servicio{padding:6px 8px}
 .num-servicio-input{
@@ -506,7 +526,7 @@ function render(){
     const gabNumCell = `<td class="gabnum">${gabNumTxt}</td>`;
 
     return `<tr>
-      <td class="id">${r.id}</td>
+      <td class="id" data-id="${r.id}" title="Clic para ver el historial de cambios de este punto">${r.id}<span class="caret">▶</span></td>
       <td class="dir">${r.dir || ''}</td>
       <td class="barrio">${r.barrio || ''}</td>
       <td class="loc">${r.loc || ''}</td>
@@ -527,6 +547,67 @@ function render(){
   }).join('');
   $('tbody').innerHTML = html;
 }
+
+// Historial por punto: al hacer clic en el ID, se despliega debajo la lista
+// de cambios de "Estado de conectividad" de ese punto.
+async function toggleHistoryRow(idTd) {
+  const tr = idTd.closest('tr');
+  const id = idTd.dataset.id;
+  const tbody = tr.parentNode;
+  // ¿Ya está abierta? La cerramos
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains('history-row') && next.dataset.historyOf === id) {
+    next.remove();
+    idTd.classList.remove('open');
+    return;
+  }
+  // Cerrar cualquier otra fila de historial abierta
+  tbody.querySelectorAll('tr.history-row').forEach(r => r.remove());
+  tbody.querySelectorAll('td.id.open').forEach(td => td.classList.remove('open'));
+
+  idTd.classList.add('open');
+  // Placeholder mientras carga
+  const colCount = tr.children.length;
+  const holder = document.createElement('tr');
+  holder.className = 'history-row';
+  holder.dataset.historyOf = id;
+  holder.innerHTML = '<td colspan="' + colCount + '"><div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty">Cargando…</div></td>';
+  tr.after(holder);
+
+  try {
+    const resp = await fetch('/api/status/log?id=' + encodeURIComponent(id) + '&field=estadoConect', { cache: 'no-store' });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const entries = await resp.json();
+    const cell = holder.firstElementChild;
+    if (!entries.length) {
+      cell.innerHTML = '<div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty">Sin cambios registrados todavía.</div>';
+      return;
+    }
+    const badge = v => {
+      const cls = v === 'con' ? 'con' : (v === 'sin' ? 'sin' : '');
+      const label = v === 'con' ? 'Con servicio' : v === 'sin' ? 'Sin servicio' : (v || '—');
+      return '<span class="h-badge ' + cls + '">' + label + '</span>';
+    };
+    const rows = entries.map(e => {
+      const when = new Date(e.ts).toLocaleString('es-AR');
+      return '<tr>' +
+        '<td class="h-time">' + when + '</td>' +
+        '<td>' + badge(e.prev) + '<span class="h-arrow">→</span>' + badge(e.next) + '</td>' +
+        '<td class="h-by">por <b>' + (e.by || '—') + '</b></td>' +
+        '</tr>';
+    }).join('');
+    cell.innerHTML =
+      '<div class="h-title">Historial · Punto ' + id + ' <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"> · ' + entries.length + ' cambio' + (entries.length===1?'':'s') + '</span></div>' +
+      '<table><thead><tr><th>Fecha y hora</th><th>Cambio</th><th>Usuario</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  } catch (err) {
+    holder.firstElementChild.innerHTML = '<div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty" style="color:var(--bad)">Error: ' + err.message + '</div>';
+  }
+}
+document.addEventListener('click', (e) => {
+  const idTd = e.target.closest && e.target.closest('td.id');
+  if (idTd) { toggleHistoryRow(idTd); }
+});
 
 // N° de servicio: guardar al perder foco (blur) o al Enter
 async function saveNumServicio(input) {

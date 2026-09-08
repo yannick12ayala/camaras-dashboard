@@ -468,9 +468,16 @@ const server = http.createServer(async (req, res) => {
   if (m === 'GET' && url === '/api/status/log') {
     try {
       if (!fs.existsSync(STATUS_LOG)) return json(res, 200, []);
+      // Filtro opcional por id y por field (query string)
+      const q = new URLSearchParams((req.url.split('?')[1]) || '');
+      const filterId    = q.get('id');
+      const filterField = q.get('field');
       const raw = fs.readFileSync(STATUS_LOG, 'utf8').split('\n').filter(Boolean);
-      const last = raw.slice(-100).reverse().map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-      return json(res, 200, last);
+      let entries = raw.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      if (filterId)    entries = entries.filter(e => String(e.id) === filterId);
+      if (filterField) entries = entries.filter(e => e.field === filterField);
+      // Últimos 500 (más antiguos primero → los invertimos para mostrar los más nuevos arriba)
+      return json(res, 200, entries.slice(-500).reverse());
     } catch (e) { return json(res, 500, { error: String(e) }); }
   }
 
