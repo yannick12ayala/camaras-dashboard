@@ -187,6 +187,15 @@ td.status-col .status{margin:0 auto}
 /* Columna ISP (readonly, del Excel) */
 td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);white-space:nowrap}
 
+/* Botón "Volver al dashboard" en el header */
+.back-btn{
+  display:inline-flex; align-items:center; gap:6px;
+  border:1px solid var(--accent); background:var(--accent);
+  color:#fff; padding:6px 12px; font-size:12px; font-weight:500;
+  border-radius:6px; text-decoration:none; transition:filter .15s;
+}
+.back-btn:hover{filter:brightness(1.08)}
+
 /* Columna ID: clickeable para desplegar historial */
 td.id{cursor:pointer; user-select:none; position:relative}
 td.id:hover{color:var(--accent)}
@@ -231,6 +240,7 @@ td.num-servicio{padding:6px 8px}
     <div class="meta">
       <div class="kv"><span class="k">Puntos</span><span class="v" id="hdrPuntos">—</span></div>
       <div class="kv"><span class="k">Visibles</span><span class="v" id="hdrVis">—</span></div>
+      <a href="/" class="back-btn" title="Volver al dashboard principal">← Dashboard</a>
       <button class="reset-btn" id="resetBtn" title="Volver a los valores originales del Excel">Restablecer</button>
       <button class="theme-btn" id="themeBtn" title="Cambiar tema">Tema</button>
     </div>
