@@ -616,10 +616,14 @@ const CONECT_MOTIVOS_MAP = [...CONECT_MOTIVOS, ...CONECT_MOTIVOS_EXTRA]
 function stConectCell(id) {
   const val = getConectSrv(id);
   const isOn = val === 'si';
-  const cls = isOn ? 'si' : 'no';
-  const label = isOn ? 'SÍ' : 'NO';
   const motivo = isOn ? getConectMotivo(id) : '';
   const motivoTxt = motivo && CONECT_MOTIVOS_MAP[motivo] ? CONECT_MOTIVOS_MAP[motivo] : '';
+  // Motivos que representan un problema activo — el botón se pone en rojo
+  // aunque la conectividad esté instalada (conect='si').
+  const PROBLEMAS = ['onu_alarmada','fibra_cortada','sin_energia','vandalizado'];
+  const esProblema = PROBLEMAS.indexOf(motivo) >= 0;
+  const cls = isOn ? (esProblema ? 'no' : 'si') : 'no';
+  const label = isOn ? 'SÍ' : 'NO';
   const motivoHtml = motivoTxt ? '<span class="estado-motivo">' + motivoTxt + '</span>' : '';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].conect;
   const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
