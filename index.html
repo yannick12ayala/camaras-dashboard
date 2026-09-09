@@ -15,7 +15,7 @@
   :root {
     --bg: #0f1117; --surface: #181c27; --surface2: #1e2335;
     --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
-    --text: #e8eaf0; --text2: #8b90a7; --text3: #555a70;
+    --text: #ffffff; --text2: #c8ccdd; --text3: #8b90a7;
     --blue: #4d8ef0; --blue-dim: rgba(77,142,240,0.15);
     --green: #3ecf8e; --green-dim: rgba(62,207,142,0.12);
     --amber: #f5a623; --coral: #ff6b6b; --purple: #9b8afb; --teal: #22d3ee;
@@ -610,7 +610,7 @@
 const EXCEL_URL = '/api/data';
 
 let charts = {};
-const C = { blue:'#4d8ef0', green:'#3ecf8e', amber:'#f5a623', coral:'#ff6b6b', purple:'#9b8afb', teal:'#22d3ee', indigo:'#6366f1', text2:'#8b90a7', grid:'rgba(255,255,255,0.05)' };
+const C = { blue:'#4d8ef0', green:'#3ecf8e', amber:'#f5a623', coral:'#ff6b6b', purple:'#9b8afb', teal:'#22d3ee', indigo:'#6366f1', text2:'#c8ccdd', grid:'rgba(255,255,255,0.08)' };
 const ISP_COLORS = { METROTEL:'#4d8ef0', BIBOP:'#3ecf8e', TELVISO:'#f5a623', F2H:'#9b8afb' };
 const ISP_COLORS_LIST = ['#4d8ef0','#3ecf8e','#f5a623','#9b8afb','#22d3ee','#ff6b6b'];
 
@@ -1090,7 +1090,7 @@ function buildProgress(d) {
     </div>
     <div style="margin-top:1.5rem;text-align:center;">
       <div style="font-size:42px;font-weight:600;letter-spacing:-0.04em;color:${pct>0?'#3ecf8e':'#555a70'}">${pct}%</div>
-      <div style="font-size:11px;color:#555a70;margin-top:4px;font-family:'DM Mono',monospace;">completado</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:4px;font-family:'DM Mono',monospace;">completado</div>
     </div>`;
 }
 
