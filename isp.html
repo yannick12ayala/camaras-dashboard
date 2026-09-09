@@ -542,14 +542,14 @@ function stEnergizadoCell(id) {
   const val = getEnergizado(id);
   const isOn = val === 'si';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEnergizado;
-  // Caso especial: quedó SIN energía por la regla automática de "Conectividad
-  // SÍ con motivo Sin energía". Se muestra "SIN ENERGÍA" en vez de "NO" para
-  // que sea evidente por qué está apagado.
-  const motivoConect = getConectMotivo(id);
-  const conectSi = getConectSrv(id) === 'si';
-  const isSinEnergia = !isOn && conectSi && motivoConect === 'sin_energia';
-  const cls = isOn ? 'si' : (isSinEnergia ? 'sin-energia' : 'no');
-  const label = isOn ? 'SÍ' : (isSinEnergia ? 'SIN ENERGÍA' : 'NO');
+  // El botón muestra "SIN ENERGÍA" (ámbar) cuando quedó apagado por una
+  // regla automática — hoy hay 3 casos:
+  //  1) Conectividad SÍ con motivo "Sin energía"
+  //  2) Estado ISP "Sin servicio" con motivo "Sin energía"
+  //  3) Estado ISP "Sin servicio" con motivo "Vandalizado"
+  const isAutoOff = !isOn && s && typeof s.by === 'string' && s.by.startsWith('auto');
+  const cls = isOn ? 'si' : (isAutoOff ? 'sin-energia' : 'no');
+  const label = isOn ? 'SÍ' : (isAutoOff ? 'SIN ENERGÍA' : 'NO');
   const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar';
   return '<td class="status-col"><button class="status energizado ' + cls +
          '" data-energizado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
@@ -599,7 +599,7 @@ function stEstadoCell(id) {
   const cls = isOn ? 'si' : 'no';
   const motivo = !isOn ? getMotivo(id) : '';
   const motivoTxt = motivo && MOTIVOS_MAP[motivo] ? MOTIVOS_MAP[motivo] : '';
-  const label = isOn ? 'CON SERVICIO' : 'SIN SERVICIO';
+  const label = isOn ? 'EN SERVICIO' : 'SIN SERVICIO';
   const motivoHtml = motivoTxt ? '<span class="estado-motivo">' + motivoTxt + '</span>' : '';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].estadoConect;
   const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
@@ -834,11 +834,12 @@ async function setEstadoSinMotivo(id, nextEstado, motivo) {
   const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
   try {
     // 1) Guardar el motivo (o limpiarlo si vuelve a CON)
-    await fetch('/api/status', {
+    const mResp = await fetch('/api/status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, field: 'motivoSinServicio', value: motivo || '' }),
+      body: JSON.stringify({ id, field: 'motivoSinServicio', value: motivo || '', cam }),
     });
+    const mData = mResp.ok ? await mResp.json().catch(() => ({})) : {};
     // 2) Guardar el nuevo estado
     const resp = await fetch('/api/status', {
       method: 'POST',
@@ -847,11 +848,21 @@ async function setEstadoSinMotivo(id, nextEstado, motivo) {
     });
     if (resp.status === 401) { location.href = '/login'; return; }
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const eData = await resp.json().catch(() => ({}));
     // Cache local
     window.SERVER_STATUS = window.SERVER_STATUS || {};
     window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
     window.SERVER_STATUS[id].estadoConect     = { value: nextEstado, by: '(vos)', at: new Date().toISOString() };
     window.SERVER_STATUS[id].motivoSinServicio = { value: motivo || '', by: '(vos)', at: new Date().toISOString() };
+    // Aplicar auto-cambio del gabinete si el server lo indicó
+    const autoGab = eData.autoGab || mData.autoGab;
+    if (autoGab) {
+      window.SERVER_STATUS[id].gabineteEnergizado = {
+        value: autoGab.next, by: 'auto (' + (autoGab.reason || '') + ')', at: new Date().toISOString(),
+      };
+      const btnE = document.querySelector('[data-energizado-id="' + CSS.escape(id) + '"]');
+      if (btnE) { const t = btnE.closest('td'); if (t) t.outerHTML = stEnergizadoCell(id); }
+    }
     // Re-render solo la celda (evita full re-render)
     const btn = document.querySelector('[data-estado-id="' + CSS.escape(id) + '"]');
     if (btn) {
@@ -1067,7 +1078,7 @@ document.addEventListener('click', async (e) => {
     document.querySelectorAll('.estado-menu').forEach(m => m.remove());
 
     if (cur === 'con') {
-      // Está CON SERVICIO → mostrar menú con los 4 motivos para pasar a SIN
+      // Está EN SERVICIO → mostrar menú con los 4 motivos para pasar a SIN
       const menu = document.createElement('div');
       menu.className = 'estado-menu';
       menu.innerHTML =

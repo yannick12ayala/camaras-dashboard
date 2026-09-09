@@ -329,8 +329,16 @@ async function notifyEstadoChange({ id, prev, next, by, cam, motivo }) {
 // o por regla automática: conectividad instalada sin energía).
 async function notifyGabinete({ id, field, prev, next, by, cam, autoGab }) {
   const isAuto = !!autoGab;
-  const title = isAuto ? 'Conectividad instalada SIN ENERGÍA'
-                       : (next === 'no' ? 'Gabinete SIN ENERGÍA' : 'Gabinete con energía');
+  const autoNext = isAuto ? autoGab.next : next;
+  const reason = isAuto ? (autoGab.reason || '') : '';
+  let title;
+  if (isAuto) {
+    if (autoNext === 'si')            title = 'Gabinete REPARADO — energía restaurada';
+    else if (reason === 'vandalizado') title = 'Gabinete VANDALIZADO — sin energía';
+    else                              title = 'Gabinete SIN ENERGÍA';
+  } else {
+    title = autoNext === 'no' ? 'Gabinete SIN ENERGÍA (manual)' : 'Gabinete con energía (manual)';
+  }
   const line = `[notify-gab] ID ${id}: ${title} (por ${by}${isAuto ? ' + auto' : ''})`;
   console.log(line);
   const mailer = getMailer();
@@ -343,9 +351,9 @@ async function notifyGabinete({ id, field, prev, next, by, cam, autoGab }) {
       <p style="color:#555;margin:0 0 18px">Portal ISP · Proyecto Cámaras V</p>
       <table style="border-collapse:collapse;font-size:14px">
         <tr><td style="color:#666;padding:4px 12px 4px 0">Punto</td><td><b>ID ${id}</b>${dir}</td></tr>
-        ${isAuto ? '<tr><td style="color:#666;padding:4px 12px 4px 0">Acción</td><td>Conectividad marcada como <b>Sin energía</b> → gabinete queda <b>no energizado</b> automáticamente.</td></tr>' : ''}
-        <tr><td style="color:#666;padding:4px 12px 4px 0">Estado anterior</td><td>${prev || '—'}</td></tr>
-        <tr><td style="color:#666;padding:4px 12px 4px 0">Estado nuevo</td><td><b>${next}</b></td></tr>
+        ${isAuto ? `<tr><td style="color:#666;padding:4px 12px 4px 0">Motivo</td><td>Automático por <b>${reason}</b></td></tr>` : ''}
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Estado anterior</td><td>${autoGab ? (autoGab.prev || '—') : (prev || '—')}</td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Estado nuevo</td><td><b>${autoNext}</b></td></tr>
         <tr><td style="color:#666;padding:4px 12px 4px 0">Cambiado por</td><td>${by}</td></tr>
         <tr><td style="color:#666;padding:4px 12px 4px 0">Cuando</td><td>${new Date().toLocaleString('es-AR')}</td></tr>
       </table>
@@ -542,14 +550,31 @@ const server = http.createServer(async (req, res) => {
     const prev = (all[id] && all[id][field] && all[id][field].value) || null;
     all[id] = all[id] || {};
     all[id][field] = { value, by: sess.username, at: new Date().toISOString() };
-    // Regla automática: si marca conectividad "sin_energia", desactivar
-    // gabineteEnergizado y registrarlo en el log (dispara notificación aparte).
+    // Reglas automáticas del gabinete energizado:
+    //
+    //  A) Si al INSTALAR la conectividad (motivoConect) elige 'sin_energia'  → gabinete = 'no'.
+    //  B) Si al reportar "Sin servicio" (motivoSinServicio) elige 'sin_energia' o
+    //     'vandalizado'  → gabinete = 'no'.
+    //  C) Si el ESTADO INSTALACIÓN ISP vuelve a 'con' (reparado), y el gabinete
+    //     había quedado en 'no' PONIENDO POR AUTOMÁTICO (by empieza con 'auto'),
+    //     el gabinete vuelve a 'si'.
     let autoGab = null;
-    if (field === 'motivoConect' && value === 'sin_energia') {
+    const setAutoGab = (nextVal, reason) => {
       const prevGab = (all[id].gabineteEnergizado && all[id].gabineteEnergizado.value) || null;
-      if (prevGab !== 'no') {
-        all[id].gabineteEnergizado = { value: 'no', by: 'auto (sin energía)', at: new Date().toISOString() };
-        autoGab = { prev: prevGab, next: 'no' };
+      if (prevGab !== nextVal) {
+        all[id].gabineteEnergizado = { value: nextVal, by: 'auto (' + reason + ')', at: new Date().toISOString() };
+        autoGab = { prev: prevGab, next: nextVal, reason };
+      }
+    };
+    if (field === 'motivoConect' && value === 'sin_energia') setAutoGab('no', 'sin energía');
+    if (field === 'motivoSinServicio' && (value === 'sin_energia' || value === 'vandalizado')) {
+      setAutoGab('no', value === 'sin_energia' ? 'sin energía' : 'vandalizado');
+    }
+    if (field === 'estadoConect' && value === 'con' && prev === 'sin') {
+      // Se reparó. Si el gabinete estaba en 'no' por regla automática, lo restauramos.
+      const gab = all[id].gabineteEnergizado;
+      if (gab && gab.value === 'no' && typeof gab.by === 'string' && gab.by.startsWith('auto')) {
+        setAutoGab('si', 'reparado');
       }
     }
     saveStatuses(all);
@@ -563,9 +588,9 @@ const server = http.createServer(async (req, res) => {
       notifyEstadoChange({ id, prev, next: value, by: sess.username, cam: body.cam || null, motivo })
         .catch(e => console.log('[notify] error:', e.message));
     }
-    // Notificar si se cambió motivoConect a 'sin_energia' (o cualquier cambio del gabineteEnergizado)
-    if ((field === 'motivoConect' && value === 'sin_energia') ||
-        (field === 'gabineteEnergizado' && prev !== value)) {
+    // Notificar por email cualquier cambio del gabinete energizado
+    // (manual o automático por sin_energia/vandalizado/reparado).
+    if ((field === 'gabineteEnergizado' && prev !== value) || autoGab) {
       notifyGabinete({ id, field, prev, next: value, by: sess.username, cam: body.cam || null, autoGab })
         .catch(e => console.log('[notify gab] error:', e.message));
     }
