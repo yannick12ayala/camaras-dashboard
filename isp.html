@@ -369,7 +369,7 @@ td.num-servicio{padding:6px 8px}
           <th data-k="isp">ISP</th>
           <th class="status-col" data-k="conect">Conectividad ISP</th>
           <th data-k="numServicio">N° de servicio</th>
-          <th class="status-col" data-k="estadoConect">Estado de conectividad</th>
+          <th class="status-col" data-k="estadoConect">Instalación de cámara</th>
           <th class="no-sort">Foto</th>
           <th class="no-sort">Plano</th>
         </tr></thead>
@@ -534,11 +534,13 @@ function numServicioCell(id) {
   return '<td class="num-servicio"><input class="num-servicio-input" data-num-id="' + id +
          '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="60"></td>';
 }
+// Motivos del menú de "Instalación de cámara".
+// 'en_servicio' → estado = con (verde). El resto → estado = sin con motivo.
 const MOTIVOS = [
+  { key: 'en_servicio',   label: 'Instalada / En servicio' },
   { key: 'onu_alarmada',  label: 'ONU alarmada' },
-  { key: 'fibra_cortada', label: 'Fibra cortada' },
-  { key: 'sin_energia',   label: 'Sin energía' },
   { key: 'vandalizado',   label: 'Vandalizado' },
+  { key: 'fibra_cortada', label: 'Fibra cortada' },
 ];
 const MOTIVOS_MAP = MOTIVOS.reduce((m, x) => (m[x.key] = x.label, m), {});
 function getMotivo(id) {
@@ -602,7 +604,15 @@ const CONECT_MOTIVOS = [
   { key: 'sin_energia', label: 'Instalada / Sin energía' },
   { key: 'vandalizado', label: 'Vandalizado' },
 ];
-const CONECT_MOTIVOS_MAP = CONECT_MOTIVOS.reduce((m, x) => (m[x.key] = x.label, m), {});
+// Motivos que se aplican automáticamente (por reglas del server desde
+// "Instalación de cámara"): no se ofrecen como opciones al técnico pero sí
+// se muestran como label del botón cuando el server los pone.
+const CONECT_MOTIVOS_EXTRA = [
+  { key: 'onu_alarmada',  label: 'ONU alarmada' },
+  { key: 'fibra_cortada', label: 'Fibra cortada' },
+];
+const CONECT_MOTIVOS_MAP = [...CONECT_MOTIVOS, ...CONECT_MOTIVOS_EXTRA]
+  .reduce((m, x) => (m[x.key] = x.label, m), {});
 function stConectCell(id) {
   const val = getConectSrv(id);
   const isOn = val === 'si';
@@ -888,9 +898,10 @@ async function setEstadoSinMotivo(id, nextEstado, motivo) {
     window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
     window.SERVER_STATUS[id].estadoConect     = { value: nextEstado, by: '(vos)', at: new Date().toISOString() };
     window.SERVER_STATUS[id].motivoSinServicio = { value: motivo || '', by: '(vos)', at: new Date().toISOString() };
-    // Aplicar auto-cambio del gabinete si el server lo indicó
+    // Aplicar auto-cambios que informó el server
     const autoGab    = eData.autoGab    || mData.autoGab;
     const autoEstado = eData.autoEstado || mData.autoEstado;
+    const autoMC    = eData.autoMotivoConect || mData.autoMotivoConect;
     if (autoGab) {
       window.SERVER_STATUS[id].gabineteEnergizado = {
         value: autoGab.next, by: 'auto (' + (autoGab.reason || '') + ')', at: new Date().toISOString(),
@@ -904,6 +915,13 @@ async function setEstadoSinMotivo(id, nextEstado, motivo) {
       };
       const btnG = document.querySelector('[data-gabinete-id="' + CSS.escape(id) + '"]');
       if (btnG) { const t = btnG.closest('td'); if (t) t.outerHTML = stGabineteCell(id); }
+    }
+    if (autoMC) {
+      window.SERVER_STATUS[id].motivoConect = {
+        value: autoMC.next, by: 'auto (' + (autoMC.reason || '') + ')', at: new Date().toISOString(),
+      };
+      const btnC = document.querySelector('[data-conect-id="' + CSS.escape(id) + '"]');
+      if (btnC) { const t = btnC.closest('td'); if (t) t.outerHTML = stConectCell(id); }
     }
     // Re-render solo la celda (evita full re-render)
     const btn = document.querySelector('[data-estado-id="' + CSS.escape(id) + '"]');
@@ -1129,7 +1147,9 @@ document.addEventListener('click', async (e) => {
     const id = estadoBtnRef.dataset.estadoId;
     const motivo = motivoBtn.dataset.motivo;
     document.querySelectorAll('.estado-menu').forEach(m => m.remove());
-    await setEstadoSinMotivo(id, 'sin', motivo);
+    // 'en_servicio' pone estado en 'con' sin motivo. El resto en 'sin' con motivo.
+    if (motivo === 'en_servicio') await setEstadoSinMotivo(id, 'con', '');
+    else                          await setEstadoSinMotivo(id, 'sin', motivo);
     return;
   }
   // Click afuera del menú → cerrar (también antes del guard)
@@ -1152,18 +1172,14 @@ document.addEventListener('click', async (e) => {
     // Cerrar cualquier otro menú abierto
     document.querySelectorAll('.estado-menu').forEach(m => m.remove());
 
-    if (cur === 'con') {
-      // Está EN SERVICIO → mostrar menú con los 4 motivos para pasar a SIN
-      const menu = document.createElement('div');
-      menu.className = 'estado-menu';
-      menu.innerHTML =
-        '<div class="m-title">Motivo del corte</div>' +
-        MOTIVOS.map(m => '<button data-motivo="' + m.key + '">' + m.label + '</button>').join('');
-      wrap.appendChild(menu);
-      return;
-    }
-    // Está SIN SERVICIO → vuelve a CON (limpia el motivo primero)
-    await setEstadoSinMotivo(estadoId, 'con', '');
+    // Siempre abrir menú con las 4 opciones ('en_servicio' pone en 'con',
+    // el resto pone en 'sin' con motivo).
+    const menu = document.createElement('div');
+    menu.className = 'estado-menu';
+    menu.innerHTML =
+      '<div class="m-title">Instalación de cámara</div>' +
+      MOTIVOS.map(m => '<button data-motivo="' + m.key + '">' + m.label + '</button>').join('');
+    wrap.appendChild(menu);
     return;
   }
 

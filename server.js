@@ -532,9 +532,10 @@ const server = http.createServer(async (req, res) => {
       motivoSinServicio: ['onu_alarmada', 'fibra_cortada', 'sin_energia', 'vandalizado', ''],
       // Conectividad instalada (antes era localStorage; ahora compartido en server)
       conect: ['si', 'no', ''],
-      // Motivo al marcar conect='si': 'sin_energia' apaga el energizado;
-      // 'vandalizado' apaga el energizado Y marca el gabinete como vandalizado.
-      motivoConect: ['en_servicio', 'sin_energia', 'vandalizado', ''],
+      // Motivo asociado a la Conectividad ISP. Algunos valores solo aparecen
+      // por regla auto (onu_alarmada, fibra_cortada — vienen de "Instalación
+      // de cámara"): no se ofrecen como opción del técnico en Conectividad ISP.
+      motivoConect: ['en_servicio', 'sin_energia', 'vandalizado', 'onu_alarmada', 'fibra_cortada', ''],
       // Gabinete energizado (independiente del gabinete instalado)
       gabineteEnergizado: ['si', 'no', ''],
       // Estado del gabinete físico (compartido/persistente). 'vandalizado' se
@@ -562,8 +563,9 @@ const server = http.createServer(async (req, res) => {
     //  C) Si el ESTADO INSTALACIÓN ISP vuelve a 'con' (reparado), y el gabinete
     //     había quedado en 'no' PONIENDO POR AUTOMÁTICO (by empieza con 'auto'),
     //     el gabinete vuelve a 'si'.
-    let autoGab = null;      // sobre gabineteEnergizado
-    let autoEstado = null;   // sobre gabineteEstado
+    let autoGab = null;         // sobre gabineteEnergizado
+    let autoEstado = null;      // sobre gabineteEstado
+    let autoMotivoConect = null; // sobre motivoConect (Conectividad ISP)
     const setAutoGab = (nextVal, reason) => {
       const prevGab = (all[id].gabineteEnergizado && all[id].gabineteEnergizado.value) || null;
       if (prevGab !== nextVal) {
@@ -576,6 +578,13 @@ const server = http.createServer(async (req, res) => {
       if (prev !== nextVal) {
         all[id].gabineteEstado = { value: nextVal, by: 'auto (' + reason + ')', at: new Date().toISOString() };
         autoEstado = { prev, next: nextVal, reason };
+      }
+    };
+    const setAutoMotivoConect = (nextVal, reason) => {
+      const prev = (all[id].motivoConect && all[id].motivoConect.value) || null;
+      if (prev !== nextVal) {
+        all[id].motivoConect = { value: nextVal, by: 'auto (' + reason + ')', at: new Date().toISOString() };
+        autoMotivoConect = { prev, next: nextVal, reason };
       }
     };
     // A) Al INSTALAR conectividad con motivo sin_energia → apaga energizado (ámbar)
@@ -592,6 +601,11 @@ const server = http.createServer(async (req, res) => {
       setAutoEstado('vandalizado', 'vandalizado');
       setAutoGab('no', 'vandalizado');
     }
+    // B'') "Instalación de cámara" con motivo ONU alarmada / Fibra cortada:
+    // se refleja en la Conectividad ISP (motivoConect) sin cambiar gabinete/energizado.
+    if (field === 'motivoSinServicio' && (value === 'onu_alarmada' || value === 'fibra_cortada')) {
+      setAutoMotivoConect(value, value === 'onu_alarmada' ? 'ONU alarmada' : 'fibra cortada');
+    }
     // C) Reparado: estadoConect vuelve a 'con'
     if (field === 'estadoConect' && value === 'con' && prev === 'sin') {
       const gab = all[id].gabineteEnergizado;
@@ -602,6 +616,11 @@ const server = http.createServer(async (req, res) => {
       if (est && est.value === 'vandalizado' && typeof est.by === 'string' && est.by.startsWith('auto')) {
         setAutoEstado('si', 'reparado');
       }
+      const mc = all[id].motivoConect;
+      if (mc && (mc.value === 'onu_alarmada' || mc.value === 'fibra_cortada') &&
+          typeof mc.by === 'string' && mc.by.startsWith('auto')) {
+        setAutoMotivoConect('en_servicio', 'reparado');
+      }
     }
     saveStatuses(all);
     appendLog({ ts: new Date().toISOString(), by: sess.username, id, field, prev, next: value });
@@ -610,6 +629,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (autoEstado) {
       appendLog({ ts: new Date().toISOString(), by: 'sistema (auto)', id, field: 'gabineteEstado', prev: autoEstado.prev, next: autoEstado.next });
+    }
+    if (autoMotivoConect) {
+      appendLog({ ts: new Date().toISOString(), by: 'sistema (auto)', id, field: 'motivoConect', prev: autoMotivoConect.prev, next: autoMotivoConect.next });
     }
     // Disparar notificación por email para estadoConect (async, no bloquea la respuesta)
     if (field === 'estadoConect' && prev !== value) {
@@ -623,7 +645,7 @@ const server = http.createServer(async (req, res) => {
       notifyGabinete({ id, field, prev, next: value, by: sess.username, cam: body.cam || null, autoGab })
         .catch(e => console.log('[notify gab] error:', e.message));
     }
-    return json(res, 200, { ok: true, prev, next: value, autoGab, autoEstado });
+    return json(res, 200, { ok: true, prev, next: value, autoGab, autoEstado, autoMotivoConect });
   }
   // Historial (últimas N entradas del log)
   if (m === 'GET' && url === '/api/status/log') {
