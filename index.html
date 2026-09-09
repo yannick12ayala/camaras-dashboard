@@ -1772,15 +1772,16 @@ async function toggleProbHistoryRow(tr) {
       const when = new Date(e.ts).toLocaleString('es-AR');
       const fLabel = e.field === 'estadoConect' ? 'Estado' : 'Motivo';
       // Mostramos "Responsable" solo cuando el motivo apunta a un problema
-      let respHtml = '';
+      let respCell = '<span style="color:var(--text3)">—</span>';
       if (e.field === 'motivoSinServicio' && e.next && e.next !== '' && e.next !== 'en_servicio') {
         const resp = responsableDe(e.next, ispDelPunto);
         const respColor = resp === 'FIBERCO' ? '#a78bfa' : '#22d3ee';
-        respHtml = ` <span style="color:var(--text3);font-size:10px;margin-left:6px">·</span> <span style="color:${respColor};font-weight:600;font-size:11px;font-family:var(--mono)">Repara: ${resp}</span>`;
+        respCell = `<span style="color:${respColor};font-weight:600;font-size:11px;font-family:var(--mono);letter-spacing:.03em">${resp}</span>`;
       }
       return `<tr>
         <td style="padding:6px 10px;color:var(--text2);font-size:11px;white-space:nowrap">${when}</td>
-        <td style="padding:6px 10px;font-size:12px"><span style="color:var(--text3);font-size:10px">${fLabel}:</span> ${badge(e.field, e.prev)} <span style="color:var(--text3);margin:0 6px">→</span> ${badge(e.field, e.next)}${respHtml}</td>
+        <td style="padding:6px 10px;font-size:12px"><span style="color:var(--text3);font-size:10px">${fLabel}:</span> ${badge(e.field, e.prev)} <span style="color:var(--text3);margin:0 6px">→</span> ${badge(e.field, e.next)}</td>
+        <td style="padding:6px 10px;font-size:12px">${respCell}</td>
         <td style="padding:6px 10px;color:var(--text2);font-size:11px">por <b style="color:var(--text1)">${e.by || '—'}</b></td>
       </tr>`;
     }).join('');
@@ -1795,6 +1796,7 @@ async function toggleProbHistoryRow(tr) {
         <thead><tr>
           <th style="text-align:left;padding:4px 10px;color:var(--text3);font-size:10px;text-transform:uppercase;font-weight:600">Fecha y hora</th>
           <th style="text-align:left;padding:4px 10px;color:var(--text3);font-size:10px;text-transform:uppercase;font-weight:600">Cambio</th>
+          <th style="text-align:left;padding:4px 10px;color:var(--text3);font-size:10px;text-transform:uppercase;font-weight:600">Repara</th>
           <th style="text-align:left;padding:4px 10px;color:var(--text3);font-size:10px;text-transform:uppercase;font-weight:600">Usuario</th>
         </tr></thead>
         <tbody>${rowsHtml}</tbody>

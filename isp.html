@@ -933,21 +933,25 @@ async function toggleHistoryRow(idTd) {
                    (e.field === 'motivoSinServicio' || e.field === 'motivoConect' || e.field === 'qaMotivo') ? 'motivo' : 'texto';
       const fLabel = fieldLabel[e.field] || e.field;
       // Cadena de reparación: solo cuando el motivo es un problema activo
-      let respHtml = '';
+      let respCell = '<span style="color:var(--muted)">—</span>';
       if ((e.field === 'motivoSinServicio' || e.field === 'qaMotivo') && e.next && e.next !== '' && e.next !== 'en_servicio') {
         const resp = responsableDe(e.next, ispDelPunto);
-        if (resp) respHtml = ' <span style="color:var(--muted);margin-left:6px">·</span> <b style="color:var(--accent)">Repara: ' + resp + '</b>';
+        if (resp) {
+          const color = resp === 'FIBERCO' ? '#a78bfa' : 'var(--accent)';
+          respCell = '<b style="color:' + color + '">' + resp + '</b>';
+        }
       }
       return '<tr>' +
         '<td class="h-time">' + when + '</td>' +
         '<td><span style="color:var(--muted);font-size:11px">' + fLabel + ':</span> ' +
-          badge(e.prev, kind) + '<span class="h-arrow">→</span>' + badge(e.next, kind) + respHtml + '</td>' +
+          badge(e.prev, kind) + '<span class="h-arrow">→</span>' + badge(e.next, kind) + '</td>' +
+        '<td class="h-resp">' + respCell + '</td>' +
         '<td class="h-by">por <b>' + (e.by || '—') + '</b></td>' +
         '</tr>';
     }).join('');
     cell.innerHTML =
       '<div class="h-title">Historial · Punto ' + id + ' <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"> · ' + entries.length + ' cambio' + (entries.length===1?'':'s') + '</span></div>' +
-      '<table><thead><tr><th>Fecha y hora</th><th>Cambio</th><th>Usuario</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      '<table><thead><tr><th>Fecha y hora</th><th>Cambio</th><th>Repara</th><th>Usuario</th></tr></thead><tbody>' + rows + '</tbody></table>';
   } catch (err) {
     holder.firstElementChild.innerHTML = '<div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty" style="color:var(--bad)">Error: ' + err.message + '</div>';
   }
