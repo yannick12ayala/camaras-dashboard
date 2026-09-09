@@ -62,11 +62,16 @@
   .isp-filter-btn.active { background: linear-gradient(135deg, #4d8ef0, #6366f1); color: #fff; border-color: transparent; box-shadow: 0 2px 8px rgba(77,142,240,.3); }
   .isp-filter-btn.active:hover { color: #fff; background: linear-gradient(135deg, #5d9ef8, #7376ff); }
 
-  /* 9 tarjetas repartidas en 2 filas visualmente iguales (5 arriba + 4 centradas abajo).
-     Se usa flex con ancho fijo por tarjeta: al no caber una 6ta en la fila, salta a la 2da
-     y justify-content:center la deja alineada al centro. */
+  /* Resumen general: dos filas
+     Fila 1 (workflow): 4 tarjetas de igual ancho centradas.
+     Fila 2 (cámaras): 6 tarjetas donde "Total dispositivos" ocupa más lugar. */
   .metrics-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
-  .metrics-grid > .metric-card { flex: 0 0 auto; width: calc((100% - 12px * 4) / 5); max-width: 220px; min-width: 150px; }
+  .metrics-grid + .metrics-grid { margin-top: 12px; }
+  .row-workflow > .metric-card { flex: 1 1 0; min-width: 170px; max-width: 260px; }
+  .row-cameras  > .metric-card { flex: 1 1 0; min-width: 150px; max-width: 200px; }
+  .row-cameras  > .metric-card.card-total { flex: 1.6 1 0; max-width: 320px; background: linear-gradient(135deg, rgba(77,142,240,.08), transparent 60%), var(--surface); border-color: rgba(77,142,240,.35); }
+  .row-cameras  > .metric-card.card-total .metric-value { font-size: 34px; }
+  .row-cameras  > .metric-card.card-total .metric-label { color: #7fb0f8; }
   .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.1rem 1.25rem; position: relative; overflow: hidden; transition: border-color 0.2s; }
   .metric-card:hover { border-color: var(--border2); }
   .metric-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
@@ -436,7 +441,8 @@
   </div>
 
   <div class="section-label">Resumen general</div>
-  <div class="metrics-grid">
+  <!-- Fila 1 · Workflow de instalación: obra civil → conectividad → QA -->
+  <div class="metrics-grid row-workflow">
     <div class="metric-card teal">
       <div class="metric-label">Postes</div>
       <div class="metric-value"><span class="m-done" id="mColDone">—</span><span class="m-sep">/</span><span class="m-total" id="mCol">—</span></div>
@@ -452,6 +458,14 @@
       <div class="metric-value"><span class="m-done" id="mConDone">—</span><span class="m-sep">/</span><span class="m-total" id="mCon">—</span></div>
       <div class="metric-sub" id="mConPct">Puntos con conectividad</div>
     </div>
+    <div class="metric-card amber">
+      <div class="metric-label">QA</div>
+      <div class="metric-value"><span class="m-done" id="mQADone">—</span><span class="m-sep">/</span><span class="m-total" id="mQA">—</span></div>
+      <div class="metric-sub" id="mQAPct">Aprobados p/ instalar cámara</div>
+    </div>
+  </div>
+  <!-- Fila 2 · Resumen de cámaras (con Total dispositivos destacado) -->
+  <div class="metrics-grid row-cameras">
     <div class="metric-card green">
       <div class="metric-label">Cámaras fijas</div>
       <div class="metric-value"><span class="m-done" id="mFijasDone">—</span><span class="m-sep">/</span><span class="m-total" id="mFijas">—</span></div>
@@ -477,7 +491,7 @@
       <div class="metric-value"><span class="m-done" id="mDobleDone">—</span><span class="m-sep">/</span><span class="m-total" id="mDoble">—</span></div>
       <div class="metric-sub">Instalados</div>
     </div>
-    <div class="metric-card blue">
+    <div class="metric-card blue card-total">
       <div class="metric-label">Total dispositivos</div>
       <div class="metric-value"><span class="m-done" id="mTotalDone">—</span><span class="m-sep">/</span><span class="m-total" id="mTotal">—</span></div>
       <div class="metric-sub">Proyecto V completo</div>
@@ -830,6 +844,14 @@ function processRows(rows) {
   // Conectividad instalada = puntos con "Estado de Conectividadad" = 1
   const conectividadCount = k.conectividad
     ? dataRows.filter(r => n(r[k.conectividad]) === 1).length : 0;
+  // QA aprobados = puntos con SERVER_STATUS.qaAprobado === 'si'
+  // (Se completa desde el portal Control de avance; hoy default 0.)
+  const SSqa = window.SERVER_STATUS || {};
+  const qaAprobados = dataRows.filter(r => {
+    const id = String(r[Object.keys(r)[0]]||'').replace('.0','');
+    const st = SSqa[id] && SSqa[id].qaAprobado;
+    return st && st.value === 'si';
+  }).length;
   // Instalados por tipo de cámara (usa "Estado Instalación Cámara" = 1)
   const sumIfInst = colKey => (k.estadoCam && colKey)
     ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCam]) ? n(r[colKey]) : 0), 0) : 0;
@@ -843,7 +865,7 @@ function processRows(rows) {
     total: sum(k.total), fijas: sum(k.fijas), lpr: sum(k.lpr), domos: sum(k.domos),
     domosLargo: sum(k.domosLargo), domosMulti: sum(k.domosMulti), domosDoble: sum(k.domosDoble),
     gab: sum(k.gab), col: sum(k.col), instalados: instGabCount,
-    colInstaladas, camInstaladas, conectividadCount,
+    colInstaladas, camInstaladas, conectividadCount, qaAprobados,
     fijasInst, lprInst, domosInst, domosMultiInst, domosDobleInst,
     poe: sum(k.poe), grua: sum(k.grua), brazo100: sum(k.b100), brazo60: sum(k.b60), jaula: sum(k.jaula),
     localidades: locs,
@@ -1143,6 +1165,7 @@ function buildCharts(d) {
   setCard('mColDone',   'mCol',   d.colInstaladas || 0, d.col   || 0, 'mColPct',   'Postes');
   setCard('mGabDone',   'mGab',   d.instalados    || 0, d.gab   || 0, 'mGabInst',  'Gabinetes');
   setCard('mConDone',    'mCon',   d.conectividadCount || 0, d.totalPuntos || 0, 'mConPct', 'Puntos con conectividad');
+  setCard('mQADone',     'mQA',    d.qaAprobados       || 0, d.totalPuntos || 0, 'mQAPct',  'Aprobados p/ instalar cámara');
   setCard('mFijasDone', 'mFijas', d.fijasInst     || 0, d.fijas || 0, 'mFijasPct', 'Fijas');
   setCard('mLPRDone',   'mLPR',   d.lprInst       || 0, d.lpr   || 0, 'mLPRPct',   'LPR');
   setCard('mDomosDone', 'mDomos', d.domosInst     || 0, d.domos || 0);
