@@ -113,6 +113,23 @@
   .donut-card .d-legend .lg .dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
   .donut-card .d-legend .lg b { margin-left: auto; font-family: var(--mono); font-weight: 700; color: var(--text); }
   .donut-card .d-legend .lg.total { grid-column: 1 / -1; padding-top: 4px; border-top: 1px solid var(--border); margin-top: 2px; }
+
+  /* Barras verticales para avance ISP */
+  .bar-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .bar-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .bar-name { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: .06em; text-transform: uppercase; }
+  .bar-total { font-size: 11px; color: var(--text2); font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+  .bar-total b { color: var(--text); font-weight: 700; margin-left: 6px; font-size: 13px; }
+  .bar-chart { display: flex; align-items: flex-end; justify-content: space-around; gap: 14px; height: 210px; padding: 0 4px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; height: 100%; }
+  .bar-num { font-size: 20px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+  .bar-track { position: relative; width: 100%; max-width: 48px; flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; display: flex; align-items: flex-end; }
+  .bar-fill { width: 100%; border-radius: 3px 3px 0 0; transition: height 0.8s cubic-bezier(0.16, 1, 0.3, 1); min-height: 2px; }
+  .bar-pct { font-size: 12px; font-weight: 600; font-family: var(--mono); }
+  .bar-lbl { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .04em; font-weight: 500; text-align: center; }
   .relevamiento-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
   .relevamiento-pct { font-size: 28px; font-weight: 600; color: var(--text); letter-spacing: -0.03em; }
   .relevamiento-label { font-size: 10px; color: var(--text2); font-family: var(--mono); }
@@ -443,9 +460,9 @@
   <div class="chart-card">
     <div class="chart-title">Avance de conectividad</div>
     <div class="chart-subtitle">
-      <span style="color:#f5a623;font-weight:600">● Amarillo</span> Factibilidad (poste + gabinete listos) &nbsp;·&nbsp;
-      <span style="color:#22d3ee;font-weight:600">● Celeste</span> Conectividad instalada &nbsp;·&nbsp;
-      <span style="color:#3ecf8e;font-weight:600">● Verde</span> Con servicio activo
+      <span style="color:#f5a623;font-weight:600">■ Factible</span> (poste + gabinete listos) &nbsp;·&nbsp;
+      <span style="color:#22d3ee;font-weight:600">■ Instalado</span> (conectividad tendida) &nbsp;·&nbsp;
+      <span style="color:#3ecf8e;font-weight:600">■ Con servicio</span> (funcionando)
     </div>
     <div id="avanceIspGrid" class="donuts-grid"></div>
   </div>
@@ -920,79 +937,42 @@ function hexAlpha(hex, alpha) {
   const r = parseInt(h.substring(0,2), 16), g = parseInt(h.substring(2,4), 16), b = parseInt(h.substring(4,6), 16);
   return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
 }
-// Donut triple anillo (para Avance ISP): 3 anillos con colores fijos por tipo.
-//   exterior  = factibilidad (poste + gabinete listos)  → AMARILLO
-//   medio     = conectividad instalada                   → CELESTE
-//   interior  = con servicio activo                      → VERDE
+// Paleta fija para las 3 métricas del avance ISP
 const RING = {
   fact: '#f5a623',  // amarillo (factibilidad)
   inst: '#22d3ee',  // celeste  (instalados)
   serv: '#3ecf8e',  // verde    (con servicio)
-  bg:   '#232838',  // resto del anillo (gris azulado oscuro)
+  bg:   '#232838',
 };
-function renderTripleDonut(container, key, name, factibles, installed, withService, total, _colorUnused) {
+
+// Gráfico de barras verticales por ISP: 3 barras (fact/inst/serv) sobre el total.
+function renderBarChart(container, key, name, factibles, installed, withService, total) {
   const pctFact = total > 0 ? Math.round(factibles   / total * 100) : 0;
   const pctInst = total > 0 ? Math.round(installed   / total * 100) : 0;
   const pctSrv  = total > 0 ? Math.round(withService / total * 100) : 0;
-  const card = document.createElement('div');
-  card.className = 'donut-card';
-  card.innerHTML =
-    '<div class="d-name">' + name + '</div>' +
-    '<div class="d-wrap">' +
-      '<canvas id="donut_' + key + '"></canvas>' +
-      '<div class="d-center">' +
-        '<div class="d-pct" style="color:' + RING.serv + ';font-size:22px">' + pctSrv + '%</div>' +
-        '<div class="d-label" style="color:' + RING.serv + '">c/ servicio</div>' +
-        '<div class="d-sublabel" style="color:' + RING.inst + '">inst: ' + pctInst + '%</div>' +
-        '<div class="d-sublabel" style="color:' + RING.fact + '">fact: ' + pctFact + '%</div>' +
+
+  const bar = (val, pct, color, key2, label) =>
+    '<div class="bar-col">' +
+      '<div class="bar-num" style="color:' + color + '">' + val + '</div>' +
+      '<div class="bar-track">' +
+        '<div class="bar-fill" style="height:' + pct + '%;background:' + color + '"></div>' +
       '</div>' +
-    '</div>' +
-    '<div class="d-legend">' +
-      '<span class="lg"><span class="dot" style="background:' + RING.fact + '"></span>Factible' +
-        '<b>' + factibles + '</b></span>' +
-      '<span class="lg"><span class="dot" style="background:' + RING.inst + '"></span>Instalado' +
-        '<b>' + installed + '</b></span>' +
-      '<span class="lg"><span class="dot" style="background:' + RING.serv + '"></span>Con servicio' +
-        '<b>' + withService + '</b></span>' +
-      '<span class="lg total"><span class="dot" style="background:var(--text2)"></span>Total' +
-        '<b>' + total + '</b></span>' +
+      '<div class="bar-pct" style="color:' + color + '">' + pct + '%</div>' +
+      '<div class="bar-lbl">' + label + '</div>' +
+    '</div>';
+
+  const card = document.createElement('div');
+  card.className = 'bar-card';
+  card.innerHTML =
+    '<div class="bar-header"><span class="bar-name">' + name + '</span>' +
+      '<span class="bar-total">Total <b>' + total + '</b></span></div>' +
+    '<div class="bar-chart">' +
+      bar(factibles,   pctFact, RING.fact, 'fact', 'Factible') +
+      bar(installed,   pctInst, RING.inst, 'inst', 'Instalado') +
+      bar(withService, pctSrv,  RING.serv, 'serv', 'Con servicio') +
     '</div>';
   container.appendChild(card);
-  charts['donut_' + key] = new Chart(card.querySelector('canvas'), {
-    type: 'doughnut',
-    data: {
-      labels: ['Factibles','No factibles','Instalados','No instalados','Con servicio','Sin servicio'],
-      datasets: [
-        { // Anillo EXTERIOR = FACTIBILIDAD (amarillo)
-          data: [factibles, Math.max(0, total - factibles)],
-          backgroundColor: [RING.fact, RING.bg],
-          borderWidth: 3, borderColor: '#181c27',
-        },
-        { // Anillo MEDIO = INSTALADA (celeste)
-          data: [installed, Math.max(0, total - installed)],
-          backgroundColor: [RING.inst, RING.bg],
-          borderWidth: 3, borderColor: '#181c27',
-        },
-        { // Anillo INTERIOR = CON SERVICIO (verde)
-          data: [withService, Math.max(0, total - withService)],
-          backgroundColor: [RING.serv, RING.bg],
-          borderWidth: 3, borderColor: '#181c27',
-        },
-      ]
-    },
-    options: {
-      responsive: false, cutout: '46%',
-      // Los tooltips se superponen con el texto del centro y confunden.
-      // Toda la info ya está en la leyenda debajo, así que los deshabilitamos.
-      events: [],
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: false }
-      }
-    }
-  });
 }
-
 // Avance de conectividad por ISP (usa estadoConect del portal ISP)
 function buildAvanceISP(d) {
   const cont = document.getElementById('avanceIspGrid');
@@ -1012,7 +992,7 @@ function buildAvanceISP(d) {
     const installed   = stats.conectadas  || 0; // conectividad instalada (Excel: Estado de Conectividadad = 1)
     const withService = stats.conServicio || 0; // con servicio activo (portal ISP: estadoConect = 'con')
     const color = (typeof ISP_COLORS !== 'undefined' && ISP_COLORS[name]) || '#4d8ef0';
-    renderTripleDonut(cont, 'isp_' + name.replace(/\W/g, '_'), name, factibles, installed, withService, total, color);
+    renderBarChart(cont, 'isp_' + name.replace(/\W/g, '_'), name, factibles, installed, withService, total);
   });
 }
 
