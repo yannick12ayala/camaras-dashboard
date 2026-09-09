@@ -4,6 +4,7 @@
   "private": true,
   "description": "Dashboard Proyecto Cámaras V — Municipalidad de Pilar. Self-hosted en servidor propio con login por perfiles.",
   "dependencies": {
-    "nodemailer": "^6.9.14"
+    "nodemailer": "^6.9.14",
+    "busboy": "^1.6.0"
   }
 }

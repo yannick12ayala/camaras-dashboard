@@ -23,6 +23,8 @@ const DATA_FILE     = process.env.DATA_FILE || '/data/camaras.xlsx';
 const LINKS_FILE    = process.env.LINKS_FILE || '/data/hyperlinks.json';
 const STATUS_FILE   = process.env.STATUS_FILE || '/data/statuses.json';
 const STATUS_LOG    = process.env.STATUS_LOG  || '/data/status_log.jsonl';
+const PHOTOS_DIR    = process.env.PHOTOS_DIR  || '/data/photos';
+const MAX_PHOTO_MB  = parseInt(process.env.MAX_PHOTO_MB || '10', 10);
 
 // SMTP para notificaciones (opcional; si SMTP_HOST no está, no envía)
 const SMTP_HOST     = process.env.SMTP_HOST || '';
@@ -323,6 +325,72 @@ async function notifyEstadoChange({ id, prev, next, by, cam, motivo }) {
   }
 }
 
+// Notificación cuando el gabinete pasa a "sin energía" (por marcado directo
+// o por regla automática: conectividad instalada sin energía).
+async function notifyGabinete({ id, field, prev, next, by, cam, autoGab }) {
+  const isAuto = !!autoGab;
+  const title = isAuto ? 'Conectividad instalada SIN ENERGÍA'
+                       : (next === 'no' ? 'Gabinete SIN ENERGÍA' : 'Gabinete con energía');
+  const line = `[notify-gab] ID ${id}: ${title} (por ${by}${isAuto ? ' + auto' : ''})`;
+  console.log(line);
+  const mailer = getMailer();
+  if (!mailer || NOTIFY_TO.length === 0) return;
+  const dir = (cam && cam.dir) ? ` — ${cam.dir}` : '';
+  const subject = `Cámaras · ID ${id}: ${title}`;
+  const html = `
+    <div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px">
+      <h2 style="margin:0 0 6px">${title}</h2>
+      <p style="color:#555;margin:0 0 18px">Portal ISP · Proyecto Cámaras V</p>
+      <table style="border-collapse:collapse;font-size:14px">
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Punto</td><td><b>ID ${id}</b>${dir}</td></tr>
+        ${isAuto ? '<tr><td style="color:#666;padding:4px 12px 4px 0">Acción</td><td>Conectividad marcada como <b>Sin energía</b> → gabinete queda <b>no energizado</b> automáticamente.</td></tr>' : ''}
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Estado anterior</td><td>${prev || '—'}</td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Estado nuevo</td><td><b>${next}</b></td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Cambiado por</td><td>${by}</td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Cuando</td><td>${new Date().toLocaleString('es-AR')}</td></tr>
+      </table>
+      <p style="margin-top:22px"><a href="${DASHBOARD_URL}/isp" style="background:#4d8ef0;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;font-size:13px">Abrir Portal ISP</a></p>
+      <p style="color:#999;font-size:11px;margin-top:24px">Aviso automático — no responder a este correo.</p>
+    </div>`;
+  try {
+    await mailer.sendMail({ from: SMTP_FROM, to: NOTIFY_TO.join(','), subject, html });
+    console.log('[mail-gab] enviado a', NOTIFY_TO.length, 'destinatarios');
+  } catch (e) {
+    console.log('[mail-gab] error al enviar:', e.message);
+  }
+}
+
+// Notificación con foto adjunta subida por el técnico.
+async function notifyFotoUpload({ id, by, cam, filename, filePath, size, caption }) {
+  console.log('[notify-foto] ID', id, 'archivo', filename, '(', size, 'bytes) por', by);
+  const mailer = getMailer();
+  if (!mailer || NOTIFY_TO.length === 0) return;
+  const dir = (cam && cam.dir) ? ` — ${cam.dir}` : '';
+  const subject = `Cámaras · ID ${id}: nueva foto del técnico`;
+  const html = `
+    <div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px">
+      <h2 style="margin:0 0 6px">Nueva foto subida</h2>
+      <p style="color:#555;margin:0 0 18px">Portal ISP · Proyecto Cámaras V</p>
+      <table style="border-collapse:collapse;font-size:14px">
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Punto</td><td><b>ID ${id}</b>${dir}</td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Subida por</td><td>${by}</td></tr>
+        <tr><td style="color:#666;padding:4px 12px 4px 0">Cuando</td><td>${new Date().toLocaleString('es-AR')}</td></tr>
+        ${caption ? `<tr><td style="color:#666;padding:4px 12px 4px 0">Nota</td><td>${caption.replace(/</g,'&lt;')}</td></tr>` : ''}
+      </table>
+      <p style="margin-top:22px"><a href="${DASHBOARD_URL}/isp" style="background:#4d8ef0;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;font-size:13px">Abrir Portal ISP</a></p>
+      <p style="color:#999;font-size:11px;margin-top:24px">La foto se adjunta en este correo como evidencia.</p>
+    </div>`;
+  try {
+    await mailer.sendMail({
+      from: SMTP_FROM, to: NOTIFY_TO.join(','), subject, html,
+      attachments: [{ filename, path: filePath }],
+    });
+    console.log('[mail-foto] enviado a', NOTIFY_TO.length, 'destinatarios');
+  } catch (e) {
+    console.log('[mail-foto] error al enviar:', e.message);
+  }
+}
+
 const STATIC_PUBLIC = {
   '/login':         { file: 'login.html',    type: 'text/html; charset=utf-8' },
   '/manifest.json': { file: 'manifest.json', type: 'application/json; charset=utf-8' },
@@ -454,6 +522,12 @@ const server = http.createServer(async (req, res) => {
       estadoConect: ['con', 'sin'],
       // Motivo cuando estadoConect = 'sin'. '' = limpiar (cuando vuelve a 'con').
       motivoSinServicio: ['onu_alarmada', 'fibra_cortada', 'sin_energia', 'vandalizado', ''],
+      // Conectividad instalada (antes era localStorage; ahora compartido en server)
+      conect: ['si', 'no', ''],
+      // Motivo al marcar conect='si': si es 'sin_energia' → gabineteEnergizado se pone en 'no' automáticamente
+      motivoConect: ['en_servicio', 'sin_energia', ''],
+      // Gabinete energizado (independiente del gabinete instalado)
+      gabineteEnergizado: ['si', 'no', ''],
     };
     const freeText = { numServicio: 60 }; // { campo: maxLen }
     if (closed[field]) {
@@ -468,15 +542,34 @@ const server = http.createServer(async (req, res) => {
     const prev = (all[id] && all[id][field] && all[id][field].value) || null;
     all[id] = all[id] || {};
     all[id][field] = { value, by: sess.username, at: new Date().toISOString() };
+    // Regla automática: si marca conectividad "sin_energia", desactivar
+    // gabineteEnergizado y registrarlo en el log (dispara notificación aparte).
+    let autoGab = null;
+    if (field === 'motivoConect' && value === 'sin_energia') {
+      const prevGab = (all[id].gabineteEnergizado && all[id].gabineteEnergizado.value) || null;
+      if (prevGab !== 'no') {
+        all[id].gabineteEnergizado = { value: 'no', by: 'auto (sin energía)', at: new Date().toISOString() };
+        autoGab = { prev: prevGab, next: 'no' };
+      }
+    }
     saveStatuses(all);
     appendLog({ ts: new Date().toISOString(), by: sess.username, id, field, prev, next: value });
+    if (autoGab) {
+      appendLog({ ts: new Date().toISOString(), by: 'sistema (auto)', id, field: 'gabineteEnergizado', prev: autoGab.prev, next: autoGab.next });
+    }
     // Disparar notificación por email para estadoConect (async, no bloquea la respuesta)
     if (field === 'estadoConect' && prev !== value) {
       const motivo = all[id].motivoSinServicio && all[id].motivoSinServicio.value;
       notifyEstadoChange({ id, prev, next: value, by: sess.username, cam: body.cam || null, motivo })
         .catch(e => console.log('[notify] error:', e.message));
     }
-    return json(res, 200, { ok: true, prev, next: value });
+    // Notificar si se cambió motivoConect a 'sin_energia' (o cualquier cambio del gabineteEnergizado)
+    if ((field === 'motivoConect' && value === 'sin_energia') ||
+        (field === 'gabineteEnergizado' && prev !== value)) {
+      notifyGabinete({ id, field, prev, next: value, by: sess.username, cam: body.cam || null, autoGab })
+        .catch(e => console.log('[notify gab] error:', e.message));
+    }
+    return json(res, 200, { ok: true, prev, next: value, autoGab });
   }
   // Historial (últimas N entradas del log)
   if (m === 'GET' && url === '/api/status/log') {
@@ -493,6 +586,92 @@ const server = http.createServer(async (req, res) => {
       // Últimos 500 (más antiguos primero → los invertimos para mostrar los más nuevos arriba)
       return json(res, 200, entries.slice(-500).reverse());
     } catch (e) { return json(res, 500, { error: String(e) }); }
+  }
+
+  // Fotos por punto: subida, listado y descarga individual
+  if (m === 'POST' && url === '/api/photo') {
+    try {
+      let Busboy;
+      try { Busboy = require('busboy'); } catch (e) { return json(res, 500, { error: 'busboy no disponible en el servidor', detail: e.message }); }
+      const bb = Busboy({ headers: req.headers, limits: { fileSize: MAX_PHOTO_MB * 1024 * 1024, files: 1 } });
+      const parts = {};
+      const fileP = new Promise((resolve, reject) => {
+        bb.on('field', (name, val) => { parts[name] = val; });
+        bb.on('file', (name, file, info) => {
+          const originalName = info.filename || 'foto';
+          const cleanName = originalName.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
+          const ts = new Date().toISOString().replace(/[:.]/g, '-');
+          const chunks = []; let size = 0; let truncated = false;
+          file.on('data', c => { chunks.push(c); size += c.length; });
+          file.on('limit', () => { truncated = true; });
+          file.on('end', () => resolve({ originalName: cleanName, ts, buf: Buffer.concat(chunks), size, mime: info.mimeType, truncated }));
+          file.on('error', reject);
+        });
+        bb.on('error', reject);
+        bb.on('close', () => setTimeout(() => resolve(null), 50));
+      });
+      req.pipe(bb);
+      const info = await fileP;
+      if (!info) return json(res, 400, { error: 'no se recibió ningún archivo' });
+      if (info.truncated) return json(res, 413, { error: 'foto demasiado grande (máx ' + MAX_PHOTO_MB + ' MB)' });
+      if (info.size === 0) return json(res, 400, { error: 'archivo vacío' });
+      const idClean = String(parts.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+      if (!idClean) return json(res, 400, { error: 'falta id' });
+      if (!info.mime || !info.mime.startsWith('image/')) return json(res, 400, { error: 'solo se aceptan imágenes' });
+
+      const dir = path.join(PHOTOS_DIR, idClean);
+      fs.mkdirSync(dir, { recursive: true });
+      const ext = (info.originalName.match(/\.[A-Za-z0-9]+$/) || ['.jpg'])[0].toLowerCase();
+      const finalName = info.ts + '__' + info.originalName;
+      const filePath = path.join(dir, finalName);
+      fs.writeFileSync(filePath, info.buf);
+      // Metadata sidecar
+      const meta = {
+        id: idClean, file: finalName, size: info.size, mime: info.mime,
+        by: sess.username, at: new Date().toISOString(),
+        caption: (parts.caption || '').toString().slice(0, 300),
+      };
+      fs.writeFileSync(filePath + '.json', JSON.stringify(meta, null, 2));
+      appendLog({ ts: meta.at, by: sess.username, id: idClean, field: 'foto', prev: null, next: finalName });
+      // Notificar por email en background
+      let cam = null; try { cam = parts.cam ? JSON.parse(parts.cam) : null; } catch {}
+      notifyFotoUpload({ id: idClean, by: sess.username, cam, filename: finalName, filePath, size: info.size, caption: meta.caption })
+        .catch(e => console.log('[notify-foto] error:', e.message));
+      return json(res, 200, { ok: true, file: finalName, size: info.size });
+    } catch (e) {
+      return json(res, 500, { error: 'no se pudo procesar la foto', detail: String(e) });
+    }
+  }
+  if (m === 'GET' && url === '/api/photos') {
+    try {
+      const q = new URLSearchParams((req.url.split('?')[1]) || '');
+      const idClean = String(q.get('id') || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+      if (!idClean) return json(res, 400, { error: 'falta id' });
+      const dir = path.join(PHOTOS_DIR, idClean);
+      if (!fs.existsSync(dir)) return json(res, 200, []);
+      const files = fs.readdirSync(dir).filter(f => !f.endsWith('.json'));
+      const list = files.map(f => {
+        let meta = {};
+        try { meta = JSON.parse(fs.readFileSync(path.join(dir, f + '.json'), 'utf8')); } catch {}
+        return { file: f, url: '/photos/' + idClean + '/' + encodeURIComponent(f),
+                 by: meta.by || '—', at: meta.at || '', caption: meta.caption || '', size: meta.size || 0 };
+      }).sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+      return json(res, 200, list);
+    } catch (e) { return json(res, 500, { error: String(e) }); }
+  }
+  if (m === 'GET' && url.startsWith('/photos/')) {
+    const parts = url.split('/').filter(Boolean); // ['photos', id, filename]
+    if (parts.length !== 3) return json(res, 400, { error: 'ruta inválida' });
+    const idClean = parts[1].replace(/[^A-Za-z0-9_-]/g, '');
+    const fileName = decodeURIComponent(parts[2]).replace(/[\\/]/g, '');
+    const filePath = path.join(PHOTOS_DIR, idClean, fileName);
+    if (!fs.existsSync(filePath)) { res.writeHead(404); return res.end('foto no encontrada'); }
+    let meta = {}; try { meta = JSON.parse(fs.readFileSync(filePath + '.json', 'utf8')); } catch {}
+    res.writeHead(200, {
+      'Content-Type': meta.mime || 'application/octet-stream',
+      'Cache-Control': 'private, max-age=300',
+    });
+    return res.end(fs.readFileSync(filePath));
   }
 
   if (m === 'GET' && url === '/api/hyperlinks') {

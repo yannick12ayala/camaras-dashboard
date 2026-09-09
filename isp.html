@@ -207,6 +207,48 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
   margin-top:2px; font-family:'Inter',sans-serif; font-weight:400;
 }
 
+/* Botón foto y modal */
+.foto-col{padding:6px 8px}
+.foto-btn{
+  border:1px solid var(--line); background:var(--surf); color:var(--ink);
+  padding:5px 10px; border-radius:6px; font:inherit; font-size:12px;
+  cursor:pointer; display:inline-flex; align-items:center; gap:4px;
+}
+.foto-btn:hover{border-color:var(--accent); color:var(--accent)}
+.foto-count{font-weight:700; font-family:'JetBrains Mono',monospace; font-size:11px}
+
+.foto-modal{
+  position:fixed; inset:0; background:rgba(0,0,0,0.72); z-index:100;
+  display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.foto-modal .fm-content{
+  background:var(--surf); border-radius:10px; max-width:640px; width:100%;
+  max-height:90vh; overflow-y:auto; padding:22px;
+}
+.foto-modal h3{margin:0 0 4px; font-size:16px; color:var(--ink)}
+.foto-modal .fm-sub{font-size:12px; color:var(--muted); margin-bottom:16px}
+.foto-modal .fm-close{float:right; background:none; border:0; color:var(--muted); font-size:22px; cursor:pointer; line-height:1; padding:0 4px}
+.foto-modal .fm-close:hover{color:var(--ink)}
+.foto-modal .fm-upload{border:1.5px dashed var(--line); border-radius:8px; padding:14px; margin-bottom:16px; text-align:center}
+.foto-modal .fm-upload input[type=file]{display:none}
+.foto-modal .fm-upload label{
+  display:inline-block; padding:8px 16px; background:var(--accent); color:#fff;
+  border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;
+}
+.foto-modal .fm-upload label:hover{filter:brightness(1.08)}
+.foto-modal .fm-upload input[type=text]{
+  width:100%; padding:8px; margin-top:8px; border:1px solid var(--line);
+  border-radius:5px; background:var(--bg); color:var(--ink); font:inherit; font-size:12px;
+}
+.foto-modal .fm-list{display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px}
+.foto-modal .fm-item{border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--bg)}
+.foto-modal .fm-item img{width:100%; height:110px; object-fit:cover; display:block; cursor:pointer}
+.foto-modal .fm-item .fm-meta{padding:6px 8px; font-size:10.5px; color:var(--muted); line-height:1.4}
+.foto-modal .fm-empty{text-align:center; color:var(--muted); padding:20px; font-size:13px}
+.foto-modal .fm-status{margin-top:8px; font-size:12px; color:var(--muted)}
+.foto-modal .fm-status.err{color:var(--bad)}
+.foto-modal .fm-status.ok{color:var(--good)}
+
 /* Botón "Volver al dashboard" en el header */
 .back-btn{
   display:inline-flex; align-items:center; gap:6px;
@@ -304,11 +346,13 @@ td.num-servicio{padding:6px 8px}
           <th data-k="coord">Coordenadas</th>
           <th class="status-col" data-k="postes">Postes</th>
           <th class="status-col" data-k="gabinete">Gabinete</th>
+          <th class="status-col" data-k="gabineteEnergizado">Energizado</th>
           <th data-k="gabNum">N° Gabinete</th>
           <th data-k="isp">ISP</th>
           <th class="status-col" data-k="conect">Conectividad</th>
           <th data-k="numServicio">N° de servicio</th>
           <th class="status-col" data-k="estadoConect">Estado de conectividad</th>
+          <th class="no-sort">Foto</th>
           <th class="no-sort">Plano</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
@@ -483,6 +527,60 @@ function getMotivo(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].motivoSinServicio;
   return s && s.value ? s.value : '';
 }
+// Gabinete energizado (persistente en el server, compartido)
+function getEnergizado(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEnergizado;
+  return s && s.value ? s.value : ''; // '' | 'si' | 'no'
+}
+function stEnergizadoCell(id) {
+  const val = getEnergizado(id);
+  const isOn = val === 'si';
+  const cls = isOn ? 'si' : 'no';
+  const label = isOn ? 'SÍ' : 'NO';
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEnergizado;
+  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar';
+  return '<td class="status-col"><button class="status energizado ' + cls +
+         '" data-energizado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
+}
+
+// Conectividad (persistente en el server, compartido — antes localStorage)
+function getConectSrv(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].conect;
+  return s && s.value ? s.value : '';
+}
+function getConectMotivo(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].motivoConect;
+  return s && s.value ? s.value : '';
+}
+const CONECT_MOTIVOS = [
+  { key: 'en_servicio', label: 'En servicio' },
+  { key: 'sin_energia', label: 'Sin energía' },
+];
+const CONECT_MOTIVOS_MAP = CONECT_MOTIVOS.reduce((m, x) => (m[x.key] = x.label, m), {});
+function stConectCell(id) {
+  const val = getConectSrv(id);
+  const isOn = val === 'si';
+  const cls = isOn ? 'si' : 'no';
+  const label = isOn ? 'SÍ' : 'NO';
+  const motivo = isOn ? getConectMotivo(id) : '';
+  const motivoTxt = motivo && CONECT_MOTIVOS_MAP[motivo] ? CONECT_MOTIVOS_MAP[motivo] : '';
+  const motivoHtml = motivoTxt ? '<span class="estado-motivo">' + motivoTxt + '</span>' : '';
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].conect;
+  const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+                : 'Clic para cambiar';
+  return '<td class="status-col"><div class="estado-wrap">' +
+         '<button class="status conect-srv ' + cls +
+         '" data-conect-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + motivoHtml + '</button>' +
+         '</div></td>';
+}
+
+// Botón de foto por punto
+function fotoCell(id) {
+  const n = (window.PHOTO_COUNTS && window.PHOTO_COUNTS[id]) || 0;
+  return '<td class="foto-col"><button class="foto-btn" data-foto-id="' + id + '" title="Subir/ver fotos">📷 ' +
+         '<span class="foto-count">' + n + '</span></button></td>';
+}
+
 function stEstadoCell(id) {
   const val = getEstado(id); // 'con' | 'sin'
   const isOn = val === 'con';
@@ -583,11 +681,13 @@ function render(){
       </td>
       ${stCell('postes')}
       ${stCell('gabinete')}
+      ${stEnergizadoCell(r.id)}
       ${gabNumCell}
       <td class="isp">${r.isp || '—'}</td>
-      ${stCell('conect')}
+      ${stConectCell(r.id)}
       ${numServicioCell(r.id)}
       ${stEstadoCell(r.id)}
+      ${fotoCell(r.id)}
       <td>${pdf}</td>
     </tr>`;
   }).join('');
@@ -751,8 +851,177 @@ async function setEstadoSinMotivo(id, nextEstado, motivo) {
   }
 }
 
+// ── Toggle "Gabinete energizado" (persistente en server) ──
+async function toggleEnergizado(id) {
+  const cur = getEnergizado(id);
+  const nxt = cur === 'si' ? 'no' : 'si';
+  try {
+    const resp = await fetch('/api/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'gabineteEnergizado', value: nxt,
+        cam: DATA.find(r => r.id === id) || null }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].gabineteEnergizado = { value: nxt, by: '(vos)', at: new Date().toISOString() };
+    const btn = document.querySelector('[data-energizado-id="' + CSS.escape(id) + '"]');
+    if (btn) { const td = btn.closest('td'); if (td) td.outerHTML = stEnergizadoCell(id); }
+  } catch (err) { alert('No se pudo guardar: ' + err.message); }
+}
+
+// ── Toggle "Conectividad" con menú de motivo al pasar a SÍ ──
+async function setConect(id, nextVal, motivo) {
+  const row = DATA.find(r => r.id === id);
+  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
+  try {
+    // Primero el motivo (si aplica), después el estado — para que la lógica auto
+    // del server tome el motivo actualizado al calcular gabineteEnergizado.
+    await fetch('/api/status', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'motivoConect', value: motivo || '' }) });
+    const resp = await fetch('/api/status', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'conect', value: nextVal, cam }) });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const d = await resp.json();
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].conect       = { value: nextVal, by: '(vos)', at: new Date().toISOString() };
+    window.SERVER_STATUS[id].motivoConect = { value: motivo || '', by: '(vos)', at: new Date().toISOString() };
+    // Regla automática del server: si motivo=sin_energia, gabineteEnergizado pasa a 'no'.
+    if (d && d.autoGab) {
+      window.SERVER_STATUS[id].gabineteEnergizado = { value: d.autoGab.next, by: 'auto', at: new Date().toISOString() };
+      const btnE = document.querySelector('[data-energizado-id="' + CSS.escape(id) + '"]');
+      if (btnE) { const t = btnE.closest('td'); if (t) t.outerHTML = stEnergizadoCell(id); }
+    }
+    const btn = document.querySelector('[data-conect-id="' + CSS.escape(id) + '"]');
+    if (btn) { const td = btn.closest('td'); if (td) td.outerHTML = stConectCell(id); }
+  } catch (err) { alert('No se pudo guardar: ' + err.message); }
+}
+
+// ── Modal de fotos ──
+async function openFotoModal(id) {
+  document.querySelectorAll('.foto-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'foto-modal';
+  modal.innerHTML =
+    '<div class="fm-content">' +
+      '<button class="fm-close" data-fm-close>×</button>' +
+      '<h3>Fotos del punto ' + id + '</h3>' +
+      '<div class="fm-sub">Subí fotos como evidencia; se envían por email a los responsables.</div>' +
+      '<div class="fm-upload">' +
+        '<label>📷 Elegir foto<input type="file" accept="image/*" id="fmFile"></label>' +
+        '<input type="text" id="fmCaption" placeholder="Nota / descripción (opcional)" maxlength="300">' +
+        '<div class="fm-status" id="fmStatus"></div>' +
+      '</div>' +
+      '<div class="fm-list" id="fmList"><div class="fm-empty">Cargando…</div></div>' +
+    '</div>';
+  modal.addEventListener('click', e => {
+    if (e.target === modal || e.target.hasAttribute('data-fm-close')) modal.remove();
+  });
+  document.body.appendChild(modal);
+  await refreshFotoList(id);
+  document.getElementById('fmFile').addEventListener('change', e => uploadFoto(id, e.target.files[0]));
+}
+async function refreshFotoList(id) {
+  const listEl = document.getElementById('fmList');
+  if (!listEl) return;
+  try {
+    const resp = await fetch('/api/photos?id=' + encodeURIComponent(id), { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const photos = await resp.json();
+    window.PHOTO_COUNTS = window.PHOTO_COUNTS || {};
+    window.PHOTO_COUNTS[id] = photos.length;
+    // Actualizar el badge en la fila
+    const badge = document.querySelector('[data-foto-id="' + CSS.escape(id) + '"] .foto-count');
+    if (badge) badge.textContent = photos.length;
+    if (!photos.length) { listEl.innerHTML = '<div class="fm-empty">Sin fotos todavía.</div>'; return; }
+    listEl.innerHTML = photos.map(p =>
+      '<div class="fm-item">' +
+        '<img src="' + p.url + '" onclick="window.open(this.src)" alt="foto">' +
+        '<div class="fm-meta"><b>' + (p.by || '—') + '</b><br>' +
+          new Date(p.at).toLocaleString('es-AR') +
+          (p.caption ? '<br>' + p.caption.replace(/</g,'&lt;') : '') +
+        '</div>' +
+      '</div>').join('');
+  } catch (err) {
+    listEl.innerHTML = '<div class="fm-empty" style="color:var(--bad)">Error: ' + err.message + '</div>';
+  }
+}
+async function uploadFoto(id, file) {
+  if (!file) return;
+  const status = document.getElementById('fmStatus');
+  status.className = 'fm-status'; status.textContent = 'Subiendo… (' + Math.round(file.size / 1024) + ' KB)';
+  const caption = (document.getElementById('fmCaption')||{}).value || '';
+  const row = DATA.find(r => r.id === id);
+  const fd = new FormData();
+  fd.append('id', id);
+  fd.append('file', file);
+  fd.append('caption', caption);
+  if (row) fd.append('cam', JSON.stringify({ dir: row.dir, loc: row.loc, barrio: row.barrio }));
+  try {
+    const resp = await fetch('/api/photo', { method: 'POST', body: fd });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(d.error || ('HTTP ' + resp.status));
+    status.className = 'fm-status ok'; status.textContent = '✓ Foto subida (' + Math.round(d.size / 1024) + ' KB). Aviso enviado por email.';
+    document.getElementById('fmFile').value = '';
+    document.getElementById('fmCaption').value = '';
+    await refreshFotoList(id);
+  } catch (err) {
+    status.className = 'fm-status err'; status.textContent = 'Error: ' + err.message;
+  }
+}
+
 // Delegated click handler for toggles
 document.addEventListener('click', async (e) => {
+  // ── Botón Foto (abre modal) ──
+  const fotoBtn = e.target.closest && e.target.closest('[data-foto-id]');
+  if (fotoBtn) { await openFotoModal(fotoBtn.dataset.fotoId); return; }
+
+  // ── Toggle Gabinete Energizado ──
+  const engBtn = e.target.closest && e.target.closest('[data-energizado-id]');
+  if (engBtn) { await toggleEnergizado(engBtn.dataset.energizadoId); return; }
+
+  // ── Toggle Conectividad (SÍ abre menú con En servicio / Sin energía) ──
+  const conectBtn = e.target.closest && e.target.closest('[data-conect-id]');
+  if (conectBtn) {
+    const id = conectBtn.dataset.conectId;
+    const cur = getConectSrv(id);
+    const wrap = conectBtn.closest('.estado-wrap');
+    const existing = wrap && wrap.querySelector('.estado-menu');
+    if (existing) { existing.remove(); return; }
+    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
+    if (cur !== 'si') {
+      // Está NO → abrir menú con motivos para pasar a SÍ
+      const menu = document.createElement('div');
+      menu.className = 'estado-menu';
+      menu.innerHTML =
+        '<div class="m-title">Al instalar conectividad</div>' +
+        CONECT_MOTIVOS.map(m2 => '<button data-conect-motivo="' + m2.key + '">' + m2.label + '</button>').join('');
+      // Los botones del menú se ven con acento (accent), no bad
+      menu.querySelectorAll('button').forEach(b => b.style.color = 'var(--ink)');
+      wrap.appendChild(menu);
+      return;
+    }
+    // Está SÍ → pasa a NO (limpia motivo)
+    await setConect(id, 'no', '');
+    return;
+  }
+  // Click en opción del menú de conectividad
+  const conectMotivoBtn = e.target.closest && e.target.closest('.estado-menu [data-conect-motivo]');
+  if (conectMotivoBtn) {
+    const wrap = conectMotivoBtn.closest('.estado-wrap');
+    const ref = wrap && wrap.querySelector('[data-conect-id]');
+    if (!ref) return;
+    const id = ref.dataset.conectId;
+    const motivo = conectMotivoBtn.dataset.conectMotivo;
+    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
+    await setConect(id, 'si', motivo);
+    return;
+  }
+
   // ── Click en una opción del menú de motivos (tiene que ir ANTES del guard .status) ──
   const motivoBtn = e.target.closest && e.target.closest('.estado-menu [data-motivo]');
   if (motivoBtn) {
@@ -844,6 +1113,8 @@ async function bootstrap() {
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
     const links = linksResp && linksResp.ok ? await linksResp.json() : {};
     window.SERVER_STATUS = statusResp && statusResp.ok ? await statusResp.json() : {};
+    // Contador de fotos por ID (para el badge del botón). Se llena on-demand.
+    window.PHOTO_COUNTS = window.PHOTO_COUNTS || {};
 
     const cols = Object.keys(rows[0] || {});
     const latKey = cols.find(k => k.includes('COORD') || k.includes('Coord'));
