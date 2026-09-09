@@ -289,23 +289,53 @@
   /* ── MOBILE: teléfono grande / tablet chica ─────────────── */
   @media (max-width: 720px) {
     header { padding: 0.85rem 1rem; }
-    .logo-icon, .logo-icon img { height: 40px; }
+    .logo-icon, .logo-icon img { height: 38px; }
     .logo-text { font-size: 14px; }
     .badge-time { display: none; }
     main { padding: 1rem; }
-    .section-label { margin-top: 1.5rem; }
+    .section-label { margin-top: 1.5rem; font-size: 10.5px; }
 
     /* Barra de sync: estado en una fila, botones grandes debajo */
     .sync-bar { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 10px; }
     .sync-status { flex-basis: 100%; }
     .btn-refresh, .btn-manual { flex: 1; justify-content: center; padding: 9px 14px; }
 
+    /* Filtro por ISP: scroll horizontal, sin wrap agresivo */
+    .isp-filter { padding: 10px; gap: 6px; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+    .isp-filter::-webkit-scrollbar { height: 4px; }
+    .isp-filter::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .isp-filter-btn { padding: 8px 12px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+
+    /* Resumen general: 2 columnas parejas para las tarjetas del workflow.
+       Total dispositivos ocupa toda la fila para destacarlo. */
     .metrics-grid { gap: 10px; }
     .metric-value { font-size: 24px; }
+    .row-workflow > .metric-card { flex: 1 1 calc(50% - 5px); min-width: 0; max-width: none; }
+    .row-cameras  > .metric-card { flex: 1 1 calc(50% - 5px); min-width: 0; max-width: none; }
+    .row-cameras  > .metric-card.card-total { flex: 1 1 100%; max-width: none; }
+    .row-cameras  > .metric-card.card-total .metric-value { font-size: 32px; }
+    .metric-card { padding: 0.95rem 1rem; }
 
     .charts-grid { grid-template-columns: 1fr; }
     .charts-grid .span2 { grid-column: span 1; }
     .chart-card { padding: 1.1rem 1.15rem; }
+    .chart-title { font-size: 14px; line-height: 1.35; }
+    .chart-title > span { display: block; margin-left: 0 !important; margin-top: 3px; font-size: 10.5px !important; }
+    .chart-subtitle, .chart-sub { font-size: 11.5px; line-height: 1.45; }
+
+    /* Avance por ISP: barras arriba, donut QA debajo (grid ya está en 1 col ≤560).
+       Forzamos también aquí para tablets que caen en este rango. */
+    .isp-grid-4 { grid-template-columns: 1fr; gap: 12px; }
+    .avance-isp-cell { grid-template-columns: 1fr; gap: 10px; }
+    .avance-isp-cell .donut-card { min-width: 0; width: 100%; }
+    .avance-isp-cell .avance-isp-right { justify-content: center; }
+
+    /* Donuts de Avance de instalación: 2 por fila en vez de auto-fit */
+    #avanceIspGrid, #installGrid { gap: 10px; }
+    .donut-card { padding: 12px; }
+    .donut-card .d-wrap { width: 130px; height: 130px; }
+    .donut-card canvas { width: 130px !important; height: 130px !important; }
+    .donut-card .d-pct { font-size: 22px; }
 
     .isp-grid { grid-template-columns: 1fr 1fr; }
 
@@ -314,6 +344,7 @@
     .relevamiento-donut { align-self: center; }
     .conprob-wrap { flex-direction: column; gap: 18px; align-items: stretch; }
     .conprob-chart-area { align-self: center; }
+    .conprob-legend { width: 100%; }
 
     /* Mapa más bajo y botones de filtro más tocables */
     #mapContainer { height: 380px; }
@@ -321,18 +352,42 @@
 
     /* Tabla de incidentes: scroll horizontal propio (no empuja la página) */
     .prob-summary { flex-wrap: wrap; gap: 10px 16px; }
-    .prob-table-wrap { overflow-x: auto; }
-    .prob-table { min-width: 460px; }
+    .prob-table-wrap { overflow-x: auto; max-height: 340px; }
+    .prob-table { min-width: 460px; font-size: 11.5px; }
+    .prob-table th, .prob-table td { padding: 7px 10px; }
   }
 
   /* ── MOBILE: teléfono chico ──────────────────────────────── */
   @media (max-width: 480px) {
     .logo-sub { display: none; }
-    .metrics-grid > .metric-card { width: calc((100% - 10px) / 2); min-width: 0; max-width: none; }
+    main { padding: 0.85rem; }
+    header { padding: 0.75rem 0.85rem; gap: 8px; }
+
+    /* Tarjetas del resumen: 2 columnas, Total dispositivos full width */
+    .row-workflow > .metric-card,
+    .row-cameras  > .metric-card { width: calc(50% - 5px); flex: 0 0 calc(50% - 5px); }
+    .row-cameras  > .metric-card.card-total { width: 100%; flex-basis: 100%; }
+    .metric-value { font-size: 21px; }
+    .metric-label { font-size: 10.5px; }
+    .row-cameras > .metric-card.card-total .metric-value { font-size: 28px; }
+
     .isp-grid { grid-template-columns: 1fr; }
-    .metric-value { font-size: 22px; }
-    #mapContainer { height: 320px; }
-    .obs-card { padding: 0.9rem 1rem; }
+    #mapContainer { height: 300px; }
+    .obs-card { padding: 0.85rem 0.9rem; }
+
+    /* Donuts un poco más chicos */
+    .donut-card .d-wrap { width: 118px; height: 118px; }
+    .donut-card canvas { width: 118px !important; height: 118px !important; }
+    .donut-card .d-pct { font-size: 20px; }
+
+    /* Barras del ISP: nombres y números un poco más chicos */
+    .bar-card { padding: 12px 13px 14px; }
+    .bar-name { font-size: 13px; }
+    .bar-row .bar-num { font-size: 13.5px; min-width: 26px; }
+
+    /* Sync-bar: apilar todo verticalmente */
+    .sync-bar { padding: 0.65rem 0.85rem; }
+    .btn-refresh, .btn-manual { font-size: 12.5px; }
   }
 
   /* ── PDF BUTTON ─────────────────────────────────────────── */
