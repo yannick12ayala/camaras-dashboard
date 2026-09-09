@@ -483,32 +483,15 @@
     <div id="avanceInstGrid" class="donuts-grid"></div>
   </div>
 
-  <!-- RELEVAMIENTO -->
-  <div class="section-label">Relevamiento de puntos</div>
-  <div class="charts-grid">
-    <div class="chart-card">
-      <div class="chart-title">Progreso de relevamiento</div>
-      <div class="chart-subtitle">Puntos relevados vs pendientes sobre el total del proyecto</div>
-      <div class="relevamiento-wrap" id="relevamientoWrap">
-        <div class="relevamiento-donut">
-          <canvas id="chartRelevamiento" role="img" aria-label="Relevamiento">Relevamiento.</canvas>
-          <div class="relevamiento-center">
-            <div class="relevamiento-pct" id="relPct">—</div>
-            <div class="relevamiento-label">relevado</div>
-          </div>
-        </div>
-        <div class="relevamiento-stats" id="relevamientoStats"></div>
-      </div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">Relevamiento por localidad</div>
-      <div class="chart-subtitle">Puntos relevados en cada zona</div>
-      <div class="chart-wrap" style="height:220px">
-        <canvas id="chartRelevLoc" role="img" aria-label="Relevamiento por localidad">Relevamiento localidad.</canvas>
-      </div>
-    </div>
+  <!-- RELEVAMIENTO (oculto por pedido; los IDs quedan como spans hidden para
+       que las funciones JS que los referencian no rompan) -->
+  <div hidden>
+    <canvas id="chartRelevamiento"></canvas>
+    <div id="relPct"></div>
+    <div id="relevamientoStats"></div>
+    <div id="relevamientoWrap"></div>
+    <canvas id="chartRelevLoc"></canvas>
   </div>
-
 
   <div id="mapSection">
     <div class="section-label">Mapa interactivo de cámaras</div>
