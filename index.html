@@ -437,7 +437,7 @@
   <div class="section-label">Avance de conectividad por ISP</div>
   <div class="chart-card">
     <div class="chart-title">Avance de conectividad</div>
-    <div class="chart-subtitle">Anillo exterior: conectividad instalada · Anillo interior: puntos que están prestando servicio</div>
+    <div class="chart-subtitle">Anillo exterior: puntos factibles (poste + gabinete listos) · Anillo medio: conectividad instalada · Anillo interior: con servicio activo</div>
     <div id="avanceIspGrid" class="donuts-grid"></div>
   </div>
 
@@ -764,11 +764,17 @@ function processRows(rows) {
   // ISP
   const SSisp = window.SERVER_STATUS || {};
   const ispData = {};
+  const isDoneVal = v => v && v !== 0 && String(v).trim() !== '' && String(v).trim() !== '0';
   dataRows.forEach(r => {
     const isp = k.isp && r[k.isp] ? String(r[k.isp]).trim().toUpperCase() : null;
     if (!isp || isp === '0' || isp === '') return;
-    if (!ispData[isp]) ispData[isp] = { total: 0, conectadas: 0, conServicio: 0 };
+    if (!ispData[isp]) ispData[isp] = { total: 0, factibles: 0, conectadas: 0, conServicio: 0 };
     ispData[isp].total += 1;
+    // Factible = poste (columna) + gabinete instalados. Es el "techo" hoy
+    // para que el ISP pueda instalar conectividad.
+    const gabOk = k.instGab   ? isDoneVal(r[k.instGab])   : false;
+    const colOk = k.estadoCol ? isDoneVal(r[k.estadoCol]) : false;
+    if (gabOk && colOk) ispData[isp].factibles += 1;
     if (k.conectividad && n(r[k.conectividad]) === 1) ispData[isp].conectadas += 1;
     // Con servicio = viene del portal ISP (estadoConect === 'con')
     const idStr = String(r[Object.keys(r)[0]]||'').replace('.0','');
@@ -899,12 +905,24 @@ function renderDonut(container, key, name, done, total, color) {
   });
 }
 
-// Donut doble anillo (para Avance ISP): exterior = instalados, interior = con servicio.
-function renderDualDonut(container, key, name, installed, withService, total, color) {
-  const pctInst = total > 0 ? Math.round(installed / total * 100) : 0;
+// Utilidad: aclarar/oscurecer un hex color en 20% (para versión "soft" del anillo de factibilidad)
+function hexAlpha(hex, alpha) {
+  const h = hex.replace('#','');
+  const r = parseInt(h.substring(0,2), 16), g = parseInt(h.substring(2,4), 16), b = parseInt(h.substring(4,6), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+}
+// Donut triple anillo (para Avance ISP):
+//   exterior  = factibilidad (poste + gabinete listos)   → color soft
+//   medio     = conectividad instalada                    → color pleno
+//   interior  = con servicio activo                       → color brillante
+function renderTripleDonut(container, key, name, factibles, installed, withService, total, color) {
+  const pctFact = total > 0 ? Math.round(factibles   / total * 100) : 0;
+  const pctInst = total > 0 ? Math.round(installed   / total * 100) : 0;
   const pctSrv  = total > 0 ? Math.round(withService / total * 100) : 0;
-  const colOut = color || '#4d8ef0';
-  const colIn  = pctSrv >= 90 ? '#3ecf8e' : pctSrv >= 50 ? '#f5a623' : pctSrv > 0 ? colOut : '#555a70';
+  const baseCol = color || '#4d8ef0';
+  const colOut  = hexAlpha(baseCol, 0.4);       // factibilidad (más suave)
+  const colMid  = baseCol;                       // instalada
+  const colIn   = pctSrv >= 90 ? '#3ecf8e' : pctSrv >= 50 ? '#f5a623' : pctSrv > 0 ? baseCol : '#8b90a7'; // servicio
   const card = document.createElement('div');
   card.className = 'donut-card';
   card.innerHTML =
@@ -914,11 +932,13 @@ function renderDualDonut(container, key, name, installed, withService, total, co
       '<div class="d-center">' +
         '<div class="d-pct" style="color:' + colIn + ';font-size:22px">' + pctSrv + '%</div>' +
         '<div class="d-label" style="color:' + colIn + '">c/ servicio</div>' +
-        '<div class="d-sublabel" style="color:' + colOut + '">inst: ' + pctInst + '%</div>' +
+        '<div class="d-sublabel" style="color:' + colMid + '">inst: ' + pctInst + '%</div>' +
+        '<div class="d-sublabel" style="color:var(--text2);margin-top:1px">fact: ' + pctFact + '%</div>' +
       '</div>' +
     '</div>' +
     '<div class="d-values">' +
-      '<span style="color:' + colOut + ';font-weight:700">' + installed + '</span> <span class="unit">inst</span> · ' +
+      '<span style="color:' + colOut + ';font-weight:700">' + factibles + '</span> <span class="unit">fact</span> · ' +
+      '<span style="color:' + colMid + ';font-weight:700">' + installed + '</span> <span class="unit">inst</span> · ' +
       '<span style="color:' + colIn + ';font-weight:700">' + withService + '</span> <span class="unit">serv</span> · ' +
       '<span style="color:var(--text)">' + total + '</span> <span class="unit">total</span>' +
     '</div>';
@@ -926,32 +946,35 @@ function renderDualDonut(container, key, name, installed, withService, total, co
   charts['donut_' + key] = new Chart(card.querySelector('canvas'), {
     type: 'doughnut',
     data: {
-      labels: ['Instalados','Sin instalar','Con servicio','Sin servicio'],
+      labels: ['Factibles','No factibles','Instalados','No instalados','Con servicio','Sin servicio'],
       datasets: [
-        { // Anillo EXTERIOR = instalados
-          data: [installed, Math.max(0, total - installed)],
+        { // Anillo EXTERIOR = factibilidad
+          data: [factibles, Math.max(0, total - factibles)],
           backgroundColor: [colOut, '#1e2335'],
           borderWidth: 2, borderColor: '#181c27',
-          weight: 1,
+        },
+        { // Anillo MEDIO = instalada
+          data: [installed, Math.max(0, total - installed)],
+          backgroundColor: [colMid, '#1e2335'],
+          borderWidth: 2, borderColor: '#181c27',
         },
         { // Anillo INTERIOR = con servicio
           data: [withService, Math.max(0, total - withService)],
           backgroundColor: [colIn, '#1e2335'],
           borderWidth: 2, borderColor: '#181c27',
-          weight: 1,
         },
       ]
     },
     options: {
-      responsive: false, cutout: '55%',
+      responsive: false, cutout: '48%',
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: {
           label: ctx => {
-            const ds = ctx.datasetIndex;
-            const val = ctx.raw;
-            if (ds === 0) return ' ' + (ctx.dataIndex === 0 ? 'Instalados: ' : 'Sin instalar: ') + val;
-            return ' ' + (ctx.dataIndex === 0 ? 'Con servicio: ' : 'Sin servicio: ') + val;
+            const labels = ['Factibles', 'Instalados', 'Con servicio'];
+            const opp    = ['No factibles', 'No instalados', 'Sin servicio'];
+            const which  = ctx.dataIndex === 0 ? labels[ctx.datasetIndex] : opp[ctx.datasetIndex];
+            return ' ' + which + ': ' + ctx.raw;
           }
         } }
       }
@@ -974,10 +997,11 @@ function buildAvanceISP(d) {
   isps.forEach(name => {
     const stats = d.isp[name] || { total: 0 };
     const total       = stats.total       || 0;
+    const factibles   = stats.factibles   || 0; // poste + gabinete instalados
     const installed   = stats.conectadas  || 0; // conectividad instalada (Excel: Estado de Conectividadad = 1)
     const withService = stats.conServicio || 0; // con servicio activo (portal ISP: estadoConect = 'con')
     const color = (typeof ISP_COLORS !== 'undefined' && ISP_COLORS[name]) || '#4d8ef0';
-    renderDualDonut(cont, 'isp_' + name.replace(/\W/g, '_'), name, installed, withService, total, color);
+    renderTripleDonut(cont, 'isp_' + name.replace(/\W/g, '_'), name, factibles, installed, withService, total, color);
   });
 }
 
