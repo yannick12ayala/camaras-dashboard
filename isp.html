@@ -539,7 +539,10 @@ function numServicioCell(id) {
 // Cantidad de MB: input editable, persistente en el server
 function getCantidadMB(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].cantidadMB;
-  return s && s.value != null ? String(s.value) : '';
+  if (s && s.value != null && String(s.value).trim() !== '') return String(s.value);
+  // Fallback: valor original del Excel (columna "Cantidad de MB")
+  const row = DATA.find(r => r.id === id);
+  return row && row.cantidadMB ? String(row.cantidadMB) : '';
 }
 function cantidadMBCell(id) {
   const val = getCantidadMB(id);
@@ -1318,6 +1321,7 @@ async function bootstrap() {
       conect: findCol('Estado de Conectividad','Conectividadad','Conectividad'),
       isp:    findCol('ISP'),
       pdf:    findCol('PDF URL','PDF_URL'),
+      mb:     findCol('Cantidad de MB','Cantidad MB','Megas','MB'),
     };
     const asNum = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
     const asStr = v => (v === null || v === undefined) ? '' : String(v).replace(/\.0$/,'').trim();
@@ -1346,6 +1350,7 @@ async function bootstrap() {
         coord:  asStr(r[latKey]),
         coord2: asStr(r[lonKey]),
         pdf:    links[id] || (asStr(r[K.pdf]).startsWith('http') ? asStr(r[K.pdf]) : ''),
+        cantidadMB: asStr(r[K.mb]),
       };
     });
 
