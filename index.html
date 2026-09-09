@@ -982,16 +982,12 @@ function renderTripleDonut(container, key, name, factibles, installed, withServi
     },
     options: {
       responsive: false, cutout: '46%',
+      // Los tooltips se superponen con el texto del centro y confunden.
+      // Toda la info ya está en la leyenda debajo, así que los deshabilitamos.
+      events: [],
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: {
-          label: ctx => {
-            const labels = ['Factibles', 'Instalados', 'Con servicio'];
-            const opp    = ['No factibles', 'No instalados', 'Sin servicio'];
-            const which  = ctx.dataIndex === 0 ? labels[ctx.datasetIndex] : opp[ctx.datasetIndex];
-            return ' ' + which + ': ' + ctx.raw;
-          }
-        } }
+        tooltip: { enabled: false }
       }
     }
   });
