@@ -585,21 +585,18 @@
       <div class="legend" id="legendMB"></div>
       <div class="chart-wrap" style="height:200px"><canvas id="chartMB" role="img" aria-label="MB">MB.</canvas></div>
     </div>
-    <div class="chart-card span2">
-      <div class="chart-title">Cámaras por localidad</div>
-      <div class="chart-subtitle">Total de cámaras asignadas a cada zona</div>
-      <div class="chart-wrap" style="height:320px"><canvas id="chartLocalidad" role="img" aria-label="Localidades">Localidades.</canvas></div>
-    </div>
+  </div>
+
+  <!-- IDs ocultos por pedido (chartLocalidad e instProgress ya no se muestran,
+       pero los referencian funciones JS que se dejan tal cual para no romper) -->
+  <div hidden>
+    <canvas id="chartLocalidad"></canvas>
+    <div id="instProgress"></div>
   </div>
 
   <!-- INSTALACION -->
   <div class="section-label">Estado de instalación</div>
   <div class="charts-grid">
-    <div class="chart-card span2">
-      <div class="chart-title">Progreso de instalación</div>
-      <div class="chart-subtitle">Etapas del proyecto: instalado vs total</div>
-      <div id="instProgress" style="padding-top:6px"></div>
-    </div>
     <div class="chart-card span2">
       <div class="chart-title">Cámaras fijas vs LPR por localidad</div>
       <div class="chart-subtitle">Comparación de tipos por zona</div>
