@@ -300,17 +300,18 @@ tr.history-row .h-time{font-family:'JetBrains Mono',monospace; color:var(--ink-2
 tr.history-row .h-by{color:var(--ink)}
 
 /* Columna N° de servicio (input editable) */
-td.num-servicio, td.cantidad-mb, td.id-dispositivo{padding:6px 8px}
-.num-servicio-input, .cantidad-mb-input, .id-dispositivo-input{
+td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col{padding:6px 8px}
+.num-servicio-input, .cantidad-mb-input, .id-dispositivo-input, .observacion-input{
   width:110px; padding:5px 8px; border:1px solid var(--line); border-radius:5px;
   background:var(--bg); color:var(--ink); font:inherit; font-size:12px;
   font-family:'JetBrains Mono',monospace; outline:none; transition:border-color .15s, background .3s;
 }
 .cantidad-mb-input{width:80px}
 .id-dispositivo-input{width:140px}
-.num-servicio-input:focus, .cantidad-mb-input:focus, .id-dispositivo-input:focus{border-color:var(--accent); background:var(--surf)}
-.num-servicio-input.saving, .cantidad-mb-input.saving, .id-dispositivo-input.saving{opacity:.55}
-.num-servicio-input.saved, .cantidad-mb-input.saved, .id-dispositivo-input.saved{border-color:var(--good); background:var(--good-soft)}
+.observacion-input{width:220px; min-height:44px; resize:vertical; font-family:inherit; line-height:1.35}
+.num-servicio-input:focus, .cantidad-mb-input:focus, .id-dispositivo-input:focus, .observacion-input:focus{border-color:var(--accent); background:var(--surf)}
+.num-servicio-input.saving, .cantidad-mb-input.saving, .id-dispositivo-input.saving, .observacion-input.saving{opacity:.55}
+.num-servicio-input.saved, .cantidad-mb-input.saved, .id-dispositivo-input.saved, .observacion-input.saved{border-color:var(--good); background:var(--good-soft)}
 </style>
 
 <div class="wrap">
@@ -379,6 +380,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo{padding:6px 8px}
           <th class="status-col" data-k="estadoConect">Instalación de cámara</th>
           <th data-k="idDispositivo">ID Dispositivo</th>
           <th class="no-sort">Foto</th>
+          <th class="no-sort" data-k="observacion">Observaciones</th>
           <th class="no-sort">Plano</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
@@ -682,6 +684,25 @@ function fotoCell(id) {
          '<span class="foto-count">' + n + '</span></button></td>';
 }
 
+// Observaciones: input libre, se guarda al perder foco. Cada guardado queda en
+// el historial con el usuario que lo agregó (mismo mecanismo que los demás campos).
+function getObservacion(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].observacion;
+  return s && s.value != null ? String(s.value) : '';
+}
+function observacionCell(id) {
+  const val = getObservacion(id);
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].observacion;
+  const tip = s
+    ? ('Última observación por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR') + ' — clic para editar o agregar')
+    : 'Agregá una observación (queda en el historial con tu usuario)';
+  const esc = (val || '').replace(/"/g, '&quot;').replace(/</g,'&lt;');
+  return '<td class="observacion-col">' +
+         '<textarea class="observacion-input" data-obs-id="' + id + '" maxlength="500" rows="2" ' +
+         'placeholder="—" title="' + tip + '">' + esc + '</textarea>' +
+         '</td>';
+}
+
 function stEstadoCell(id) {
   const val = getEstado(id); // 'con' | 'sin'
   const isOn = val === 'con';
@@ -819,6 +840,7 @@ function render(){
       ${stEstadoCell(r.id)}
       ${idDispositivoCell(r.id)}
       ${fotoCell(r.id)}
+      ${observacionCell(r.id)}
       <td>${pdf}</td>
     </tr>`;
   }).join('');
@@ -884,6 +906,7 @@ async function toggleHistoryRow(idTd) {
       idDispositivo:    'ID Dispositivo',
       qaEstado:         'QA',
       qaMotivo:         'QA Motivo',
+      observacion:      'Observación',
     };
     const rows = entries.map(e => {
       const when = new Date(e.ts).toLocaleString('es-AR');
@@ -946,13 +969,52 @@ document.addEventListener('blur', (e) => {
   if (inpMB) saveCantidadMB(inpMB);
   const inpIdd = e.target.closest && e.target.closest('.id-dispositivo-input');
   if (inpIdd) saveIdDispositivo(inpIdd);
+  const inpObs = e.target.closest && e.target.closest('.observacion-input');
+  if (inpObs) saveObservacion(inpObs);
 }, true);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
+    // En observacion permitimos multi-línea con Shift+Enter; Enter solo guarda (blur)
+    const obs = e.target.closest && e.target.closest('.observacion-input');
+    if (obs) {
+      if (!e.shiftKey) { e.preventDefault(); obs.blur(); }
+      return;
+    }
     const inp = e.target.closest && e.target.closest('.num-servicio-input, .cantidad-mb-input, .id-dispositivo-input');
     if (inp) { inp.blur(); }
   }
 });
+
+// Guardar Observación al perder foco. Cada guardado se registra en el log
+// (por lo tanto queda visible en el historial del punto con quién y cuándo).
+async function saveObservacion(input) {
+  const id = input.dataset.obsId;
+  if (!id) return;
+  const value = input.value.trim();
+  const prev = getObservacion(id);
+  if (value === prev) return;
+  input.disabled = true;
+  input.classList.add('saving');
+  try {
+    const resp = await fetch('/api/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'observacion', value }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].observacion = { value, by: '(vos)', at: new Date().toISOString() };
+    input.classList.remove('saving');
+    input.classList.add('saved');
+    setTimeout(() => input.classList.remove('saved'), 1200);
+  } catch (err) {
+    alert('No se pudo guardar la observación: ' + err.message);
+    input.value = prev;
+  } finally {
+    input.disabled = false;
+  }
+}
 
 // ID Dispositivo: guardar al perder foco (blur) o al Enter
 async function saveIdDispositivo(input) {
