@@ -621,7 +621,7 @@
     <div class="prob-summary" id="prob-summary" style="margin-top:12px;"></div>
     <div class="prob-table-wrap">
       <table class="prob-table">
-        <thead><tr><th>ID</th><th>Dirección</th><th>Localidad</th><th>ISP</th><th>Tipo de problema</th><th>Estado</th></tr></thead>
+        <thead><tr><th>ID</th><th>Dirección</th><th>Localidad</th><th>ISP</th><th>Tipo de problema</th><th>Responsable</th><th>Estado</th></tr></thead>
         <tbody id="prob-tbody"></tbody>
       </table>
     </div>
@@ -1668,6 +1668,21 @@ document.getElementById('ispFilter').addEventListener('click', (e) => {
 });
 
 // ── NUEVAS FUNCIONES ─────────────────────────────────────────
+// Cadena de reparación por motivo:
+//   sin_energia | vandalizado          → FIBERCO
+//   onu_alarmada | falla_enrutamiento  → el ISP asignado a ese punto
+//   fibra_cortada                      → el ISP asignado (por defecto — ajustar si cambia)
+function responsableDe(motivo, isp) {
+  const m = String(motivo || '').toLowerCase();
+  if (m === 'sin energía' || m === 'sin energia' || m === 'sin_energia' || m === 'vandalizado') return 'FIBERCO';
+  if (m === 'onu alarmada' || m === 'onu_alarmada' ||
+      m === 'falla de enrutamiento' || m === 'falla_enrutamiento' ||
+      m === 'fibra cortada' || m === 'fibra_cortada') {
+    return (isp && String(isp).trim()) ? String(isp).trim().toUpperCase() : 'ISP';
+  }
+  return '—';
+}
+
 function renderProblemas(rows) {
   const tbody = document.getElementById('prob-tbody');
   const summary = document.getElementById('prob-summary');
@@ -1676,18 +1691,21 @@ function renderProblemas(rows) {
   // consulta on-demand al hacer clic en el ID.
   const activos = rows.filter(r => r.probConect === 1);
   if (!activos.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin incidentes activos</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin incidentes activos</td></tr>';
     if (summary) summary.innerHTML = '';
     return;
   }
   if (summary) summary.innerHTML = `<div class="prob-stat"><div class="prob-stat-dot" style="background:#ef4444"></div><span>Activos:</span><span class="prob-stat-num" style="color:#ef4444">${activos.length}</span></div>`;
   tbody.innerHTML = activos.map(r => {
+    const resp = responsableDe(r.tipoProblem, r.isp);
+    const respColor = resp === 'FIBERCO' ? '#a78bfa' : (resp === '—' ? 'var(--text3)' : '#22d3ee');
     return `<tr class="prob-activo" data-prob-id="${r.id}">
       <td><span class="prob-id activo" style="cursor:pointer" title="Clic para ver el historial de incidentes de este punto">#${r.id} <span class="prob-caret" style="font-size:9px;opacity:.7">▶</span></span></td>
       <td style="color:var(--text1)">${r.direccion||''}</td>
       <td style="color:var(--text2);font-size:11px">${r.localidad||'—'}</td>
       <td style="color:var(--text2);font-size:11px">${r.isp||'—'}</td>
       <td style="color:var(--text2);font-size:11px">${r.tipoProblem||'—'}</td>
+      <td><span style="color:${respColor};font-weight:600;font-size:11px;font-family:var(--mono);letter-spacing:.03em">${resp}</span></td>
       <td><span class="prob-badge activo">● Activo</span></td>
     </tr>`;
   }).join('');
@@ -1709,7 +1727,7 @@ async function toggleProbHistoryRow(tr) {
   const holder = document.createElement('tr');
   holder.className = 'prob-history-row';
   holder.dataset.historyOf = id;
-  holder.innerHTML = `<td colspan="6" style="background:var(--surface2);padding:14px 18px">
+  holder.innerHTML = `<td colspan="7" style="background:var(--surface2);padding:14px 18px">
     <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Historial · Punto ${id}</div>
     <div style="color:var(--text2);font-size:12px">Cargando…</div>
   </td>`;
@@ -1740,12 +1758,29 @@ async function toggleProbHistoryRow(tr) {
       if (field === 'motivoSinServicio') return `<span style="color:#f5a623">${MOT_LABEL[v]||v}</span>`;
       return v;
     };
+    // Buscar el ISP asignado a este punto para calcular el responsable
+    const rowForResp = (typeof DATA !== 'undefined' && DATA)
+      ? null
+      : null;
+    const ispDelPunto = (function(){
+      const src = document.querySelector(`tr.prob-activo[data-prob-id="${id}"]`);
+      if (!src) return '';
+      const cells = src.querySelectorAll('td');
+      return cells[3] ? cells[3].textContent.trim() : '';
+    })();
     const rowsHtml = relevantes.map(e => {
       const when = new Date(e.ts).toLocaleString('es-AR');
       const fLabel = e.field === 'estadoConect' ? 'Estado' : 'Motivo';
+      // Mostramos "Responsable" solo cuando el motivo apunta a un problema
+      let respHtml = '';
+      if (e.field === 'motivoSinServicio' && e.next && e.next !== '' && e.next !== 'en_servicio') {
+        const resp = responsableDe(e.next, ispDelPunto);
+        const respColor = resp === 'FIBERCO' ? '#a78bfa' : '#22d3ee';
+        respHtml = ` <span style="color:var(--text3);font-size:10px;margin-left:6px">·</span> <span style="color:${respColor};font-weight:600;font-size:11px;font-family:var(--mono)">Repara: ${resp}</span>`;
+      }
       return `<tr>
         <td style="padding:6px 10px;color:var(--text2);font-size:11px;white-space:nowrap">${when}</td>
-        <td style="padding:6px 10px;font-size:12px"><span style="color:var(--text3);font-size:10px">${fLabel}:</span> ${badge(e.field, e.prev)} <span style="color:var(--text3);margin:0 6px">→</span> ${badge(e.field, e.next)}</td>
+        <td style="padding:6px 10px;font-size:12px"><span style="color:var(--text3);font-size:10px">${fLabel}:</span> ${badge(e.field, e.prev)} <span style="color:var(--text3);margin:0 6px">→</span> ${badge(e.field, e.next)}${respHtml}</td>
         <td style="padding:6px 10px;color:var(--text2);font-size:11px">por <b style="color:var(--text1)">${e.by || '—'}</b></td>
       </tr>`;
     }).join('');

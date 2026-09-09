@@ -585,6 +585,17 @@ const MOTIVOS = [
   { key: 'falla_enrutamiento', label: 'Falla de enrutamiento' },
 ];
 const MOTIVOS_MAP = MOTIVOS.reduce((m, x) => (m[x.key] = x.label, m), {});
+// Cadena de reparación por motivo:
+//   sin_energia | vandalizado          → FIBERCO
+//   onu_alarmada | falla_enrutamiento  → el ISP asignado a ese punto
+//   fibra_cortada                      → el ISP asignado
+function responsableDe(motivoKey, ispDelPunto) {
+  if (motivoKey === 'sin_energia' || motivoKey === 'vandalizado') return 'FIBERCO';
+  if (motivoKey === 'onu_alarmada' || motivoKey === 'falla_enrutamiento' || motivoKey === 'fibra_cortada') {
+    return (ispDelPunto && String(ispDelPunto).trim()) ? String(ispDelPunto).trim().toUpperCase() : 'ISP';
+  }
+  return '';
+}
 function getMotivo(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].motivoSinServicio;
   return s && s.value ? s.value : '';
@@ -710,10 +721,16 @@ function stEstadoCell(id) {
   const motivo = !isOn ? getMotivo(id) : '';
   const motivoTxt = motivo && MOTIVOS_MAP[motivo] ? MOTIVOS_MAP[motivo] : '';
   const label = isOn ? 'EN SERVICIO' : 'SIN SERVICIO';
-  const motivoHtml = motivoTxt ? '<span class="estado-motivo">' + motivoTxt + '</span>' : '';
+  // Responsable de la reparación (según el motivo + ISP del punto)
+  const row = DATA.find(r => r.id === id);
+  const resp = !isOn && motivo ? responsableDe(motivo, row && row.isp) : '';
+  const motivoHtml = motivoTxt
+    ? '<span class="estado-motivo">' + motivoTxt + (resp ? ' · <b>' + resp + '</b>' : '') + '</span>'
+    : '';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].estadoConect;
-  const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
-                : ('Clic para marcar ' + (isOn ? 'SIN' : 'CON') + ' servicio');
+  const tip = s
+    ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + (resp ? ' · Repara: ' + resp : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+    : ('Clic para marcar ' + (isOn ? 'SIN' : 'CON') + ' servicio');
   return '<td class="status-col"><div class="estado-wrap">' +
          '<button class="status estado-conect ' + cls +
          '" data-estado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + motivoHtml + '</button>' +
@@ -908,15 +925,23 @@ async function toggleHistoryRow(idTd) {
       qaMotivo:         'QA Motivo',
       observacion:      'Observación',
     };
+    const rowData = DATA.find(r => r.id === id);
+    const ispDelPunto = rowData ? rowData.isp : '';
     const rows = entries.map(e => {
       const when = new Date(e.ts).toLocaleString('es-AR');
       const kind = e.field === 'estadoConect' ? 'estado' :
-                   e.field === 'motivoSinServicio' ? 'motivo' : 'texto';
+                   (e.field === 'motivoSinServicio' || e.field === 'motivoConect' || e.field === 'qaMotivo') ? 'motivo' : 'texto';
       const fLabel = fieldLabel[e.field] || e.field;
+      // Cadena de reparación: solo cuando el motivo es un problema activo
+      let respHtml = '';
+      if ((e.field === 'motivoSinServicio' || e.field === 'qaMotivo') && e.next && e.next !== '' && e.next !== 'en_servicio') {
+        const resp = responsableDe(e.next, ispDelPunto);
+        if (resp) respHtml = ' <span style="color:var(--muted);margin-left:6px">·</span> <b style="color:var(--accent)">Repara: ' + resp + '</b>';
+      }
       return '<tr>' +
         '<td class="h-time">' + when + '</td>' +
         '<td><span style="color:var(--muted);font-size:11px">' + fLabel + ':</span> ' +
-          badge(e.prev, kind) + '<span class="h-arrow">→</span>' + badge(e.next, kind) + '</td>' +
+          badge(e.prev, kind) + '<span class="h-arrow">→</span>' + badge(e.next, kind) + respHtml + '</td>' +
         '<td class="h-by">por <b>' + (e.by || '—') + '</b></td>' +
         '</tr>';
     }).join('');
