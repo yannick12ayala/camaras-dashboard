@@ -300,7 +300,14 @@ tr.history-row .h-time{font-family:'JetBrains Mono',monospace; color:var(--ink-2
 tr.history-row .h-by{color:var(--ink)}
 
 /* Columna N° de servicio (input editable) */
-td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notify-col{padding:6px 8px}
+td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notify-col, td.lote-col{padding:6px 8px}
+.lote-input{
+  padding:5px 8px; border:1px solid var(--line); border-radius:5px;
+  background:var(--bg); color:var(--ink); font:inherit; font-size:12px;
+  outline:none; cursor:pointer; min-width:110px;
+}
+.lote-input:focus{border-color:var(--accent); background:var(--surf)}
+.lote-input:disabled{opacity:.55; cursor:wait}
 .notify-btn{
   display:inline-flex; align-items:center; gap:6px;
   padding:7px 12px; border:1px solid #f5a623;
@@ -393,6 +400,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
           <th class="status-col" data-k="gabineteEnergizado">Energizado</th>
           <th data-k="gabNum">N° Gabinete</th>
           <th data-k="isp">ISP</th>
+          <th data-k="lote">Lote</th>
           <th class="status-col" data-k="conect">Conectividad ISP</th>
           <th data-k="numServicio">N° de servicio</th>
           <th class="status-col" data-k="qaEstado">QA</th>
@@ -564,6 +572,37 @@ function numServicioCell(id) {
   return '<td class="num-servicio"><input class="num-servicio-input" data-num-id="' + id +
          '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="60"></td>';
 }
+// Lote de instalación: select con los lotes existentes + opción para crear uno nuevo.
+function getLote(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].lote;
+  return s && s.value != null ? String(s.value) : '';
+}
+// Recorre SERVER_STATUS para armar la lista única de lotes ya asignados (para el <select>).
+function lotesExistentes() {
+  const set = new Set();
+  const ss = window.SERVER_STATUS || {};
+  Object.keys(ss).forEach(k => {
+    const v = ss[k] && ss[k].lote && ss[k].lote.value;
+    if (v) set.add(String(v));
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+}
+function loteCell(id) {
+  const val = getLote(id);
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].lote;
+  const tip = s ? ('Asignado por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+                : 'Elegí un lote existente o creá uno nuevo';
+  const lotes = lotesExistentes();
+  if (val && !lotes.includes(val)) lotes.push(val);
+  const opts = ['<option value="">—</option>']
+    .concat(lotes.map(l => '<option value="' + l.replace(/"/g,'&quot;') + '"' + (l === val ? ' selected' : '') + '>' + l + '</option>'))
+    .concat('<option value="__NEW__">+ Nuevo lote…</option>')
+    .join('');
+  return '<td class="lote-col">' +
+         '<select class="lote-input" data-lote-id="' + id + '" title="' + tip + '">' + opts + '</select>' +
+         '</td>';
+}
+
 // Cantidad de MB: input editable, persistente en el server
 function getCantidadMB(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].cantidadMB;
@@ -871,6 +910,7 @@ function render(){
       ${stEnergizadoCell(r.id)}
       ${gabNumCell}
       <td class="isp">${r.isp || '—'}</td>
+      ${loteCell(r.id)}
       ${stConectCell(r.id)}
       ${numServicioCell(r.id)}
       ${stQaCell(r.id)}
@@ -945,6 +985,7 @@ async function toggleHistoryRow(idTd) {
       qaEstado:         'QA',
       qaMotivo:         'QA Motivo',
       observacion:      'Observación',
+      lote:             'Lote',
     };
     const rowData = DATA.find(r => r.id === id);
     const ispDelPunto = rowData ? rowData.isp : '';
@@ -1032,6 +1073,43 @@ document.addEventListener('keydown', (e) => {
     }
     const inp = e.target.closest && e.target.closest('.num-servicio-input, .cantidad-mb-input, .id-dispositivo-input');
     if (inp) { inp.blur(); }
+  }
+});
+
+// Lote: guardar al cambiar el <select>. Si el usuario elige "+ Nuevo lote…"
+// pedimos el nombre con prompt() y guardamos ese.
+document.addEventListener('change', async (e) => {
+  const sel = e.target.closest && e.target.closest('.lote-input');
+  if (!sel) return;
+  const id = sel.dataset.loteId;
+  if (!id) return;
+  let value = sel.value;
+  const prev = getLote(id);
+  if (value === '__NEW__') {
+    const nombre = prompt('Nombre del nuevo lote (ej. "Lote 3"):', 'Lote ');
+    if (!nombre || !nombre.trim()) { sel.value = prev; return; }
+    value = nombre.trim().slice(0, 20);
+  }
+  if (value === prev) return;
+  sel.disabled = true;
+  try {
+    const resp = await fetch('/api/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'lote', value }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].lote = { value, by: '(vos)', at: new Date().toISOString() };
+    // Repintar la celda para que refleje el nuevo lote y aparezca en el <select> de otros puntos
+    const td = sel.closest('td');
+    if (td) td.outerHTML = loteCell(id);
+  } catch (err) {
+    alert('No se pudo asignar el lote: ' + err.message);
+    sel.value = prev;
+  } finally {
+    sel.disabled = false;
   }
 });
 
