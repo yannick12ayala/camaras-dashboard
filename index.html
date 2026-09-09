@@ -67,7 +67,10 @@
   .metric-card.teal::before { background: linear-gradient(90deg, var(--teal), transparent); }
   .metric-card.indigo::before { background: linear-gradient(90deg, #6366f1, transparent); }
   .metric-label { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
-  .metric-value { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; color: var(--text); }
+  .metric-value { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; color: var(--text); display: flex; align-items: baseline; gap: 2px; }
+  .metric-value .m-done { color: #3ecf8e; }
+  .metric-value .m-sep { color: var(--text3); font-weight: 400; margin: 0 3px; font-size: 24px; }
+  .metric-value .m-total { color: var(--text3); font-weight: 500; }
   .metric-sub { font-size: 11px; color: var(--text2); margin-top: 3px; font-family: var(--mono); }
 
   .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -384,17 +387,51 @@
 <main>
   <div class="section-label">Resumen general</div>
   <div class="metrics-grid">
-    <div class="metric-card blue"><div class="metric-label">Total cámaras</div><div class="metric-value" id="mTotal">—</div><div class="metric-sub">Proyecto V completo</div></div>
-    <div class="metric-card green"><div class="metric-label">Cámaras fijas</div><div class="metric-value" id="mFijas">—</div><div class="metric-sub" id="mFijasPct"></div></div>
-    <div class="metric-card amber"><div class="metric-label">LPR</div><div class="metric-value" id="mLPR">—</div><div class="metric-sub" id="mLPRPct"></div></div>
-    <div class="metric-card coral"><div class="metric-label">Domos Comunes</div><div class="metric-value" id="mDomos">—</div><div class="metric-sub">Comunes</div></div>
-    <div class="metric-card amber"><div class="metric-label">Domos Largo Alcance</div><div class="metric-value" id="mLargo">—</div><div class="metric-sub">Largo alcance</div></div>
-    <div class="metric-card teal"><div class="metric-label">Domos Multisensor</div><div class="metric-value" id="mMulti">—</div><div class="metric-sub">Multisensor</div></div>
-    <div class="metric-card purple"><div class="metric-label">Domos Doble Imagen</div><div class="metric-value" id="mDoble">—</div><div class="metric-sub">Doble imagen</div></div>
-    <div class="metric-card purple"><div class="metric-label">Gabinetes</div><div class="metric-value" id="mGab">—</div><div class="metric-sub" id="mGabInst"></div></div>
-    <div class="metric-card teal"><div class="metric-label">Columnas</div><div class="metric-value" id="mCol">—</div><div class="metric-sub">Total</div></div>
-    <div class="metric-card indigo"><div class="metric-label">Relevados</div><div class="metric-value" id="mRelevados">—</div><div class="metric-sub" id="mRelevadosPct"></div></div>
+    <div class="metric-card teal">
+      <div class="metric-label">Postes</div>
+      <div class="metric-value"><span class="m-done" id="mColDone">—</span><span class="m-sep">/</span><span class="m-total" id="mCol">—</span></div>
+      <div class="metric-sub" id="mColPct">Instalados</div>
+    </div>
+    <div class="metric-card purple">
+      <div class="metric-label">Gabinetes</div>
+      <div class="metric-value"><span class="m-done" id="mGabDone">—</span><span class="m-sep">/</span><span class="m-total" id="mGab">—</span></div>
+      <div class="metric-sub" id="mGabInst">Instalados</div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-label">Cámaras fijas</div>
+      <div class="metric-value"><span class="m-done" id="mFijasDone">—</span><span class="m-sep">/</span><span class="m-total" id="mFijas">—</span></div>
+      <div class="metric-sub" id="mFijasPct">Instaladas</div>
+    </div>
+    <div class="metric-card amber">
+      <div class="metric-label">LPR</div>
+      <div class="metric-value"><span class="m-done" id="mLPRDone">—</span><span class="m-sep">/</span><span class="m-total" id="mLPR">—</span></div>
+      <div class="metric-sub" id="mLPRPct">Instaladas</div>
+    </div>
+    <div class="metric-card coral">
+      <div class="metric-label">Domos Comunes</div>
+      <div class="metric-value"><span class="m-done" id="mDomosDone">—</span><span class="m-sep">/</span><span class="m-total" id="mDomos">—</span></div>
+      <div class="metric-sub">Instalados</div>
+    </div>
+    <div class="metric-card teal">
+      <div class="metric-label">Domos Multisensor</div>
+      <div class="metric-value"><span class="m-done" id="mMultiDone">—</span><span class="m-sep">/</span><span class="m-total" id="mMulti">—</span></div>
+      <div class="metric-sub">Instalados</div>
+    </div>
+    <div class="metric-card purple">
+      <div class="metric-label">Domos Doble Imagen</div>
+      <div class="metric-value"><span class="m-done" id="mDobleDone">—</span><span class="m-sep">/</span><span class="m-total" id="mDoble">—</span></div>
+      <div class="metric-sub">Instalados</div>
+    </div>
+    <div class="metric-card blue">
+      <div class="metric-label">Total cámaras</div>
+      <div class="metric-value"><span class="m-done" id="mTotalDone">—</span><span class="m-sep">/</span><span class="m-total" id="mTotal">—</span></div>
+      <div class="metric-sub">Proyecto V completo</div>
+    </div>
   </div>
+  <!-- ID conservado (usado en otros lugares) para compatibilidad -->
+  <span id="mLargo" style="display:none">0</span>
+  <span id="mRelevados" style="display:none">0</span>
+  <span id="mRelevadosPct" style="display:none"></span>
 
   <!-- AVANCE DE CONECTIVIDAD POR ISP (viene del portal ISP) -->
   <div class="section-label">Avance de conectividad por ISP</div>
@@ -754,12 +791,21 @@ function processRows(rows) {
     ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCam]) ? n(r[k.total]) : 0), 0) : 0;
   const colInstaladas = (k.estadoCol && k.col)
     ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCol]) ? n(r[k.col]) : 0), 0) : 0;
+  // Instalados por tipo de cámara (usa "Estado Instalación Cámara" = 1)
+  const sumIfInst = colKey => (k.estadoCam && colKey)
+    ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCam]) ? n(r[colKey]) : 0), 0) : 0;
+  const fijasInst      = sumIfInst(k.fijas);
+  const lprInst        = sumIfInst(k.lpr);
+  const domosInst      = sumIfInst(k.domos);
+  const domosMultiInst = sumIfInst(k.domosMulti);
+  const domosDobleInst = sumIfInst(k.domosDoble);
 
   buildCharts({
     total: sum(k.total), fijas: sum(k.fijas), lpr: sum(k.lpr), domos: sum(k.domos),
     domosLargo: sum(k.domosLargo), domosMulti: sum(k.domosMulti), domosDoble: sum(k.domosDoble),
     gab: sum(k.gab), col: sum(k.col), instalados: instGabCount,
     colInstaladas, camInstaladas,
+    fijasInst, lprInst, domosInst, domosMultiInst, domosDobleInst,
     poe: sum(k.poe), grua: sum(k.grua), brazo100: sum(k.b100), brazo60: sum(k.b60), jaula: sum(k.jaula),
     localidades: locs,
     mb: Object.keys(mbDist).length ? mbDist : {},
@@ -1050,18 +1096,28 @@ function buildProgress(d) {
 
 function buildCharts(d) {
   destroyCharts();
-  document.getElementById('mTotal').textContent    = d.total;
-  document.getElementById('mFijas').textContent    = d.fijas;
-  document.getElementById('mFijasPct').textContent = d.total>0 ? Math.round(d.fijas/d.total*100)+'% del total' : '';
-  document.getElementById('mLPR').textContent      = d.lpr;
-  document.getElementById('mLPRPct').textContent   = d.total>0 ? Math.round(d.lpr/d.total*100)+'% del total' : '';
-  document.getElementById('mDomos').textContent    = d.domos;
-  document.getElementById('mLargo').textContent    = d.domosLargo;
-  document.getElementById('mMulti').textContent    = d.domosMulti;
-  document.getElementById('mDoble').textContent    = d.domosDoble;
-  document.getElementById('mGab').textContent      = d.gab;
-  document.getElementById('mGabInst').textContent  = d.instalados+' instalados';
-  document.getElementById('mCol').textContent      = d.col;
+  // Cada tarjeta muestra "instalados / total" (verde / gris)
+  const setCard = (doneId, totalId, done, total, subId, subLabel) => {
+    const dEl = document.getElementById(doneId);
+    const tEl = document.getElementById(totalId);
+    if (dEl) dEl.textContent = done;
+    if (tEl) tEl.textContent = total;
+    if (subId) {
+      const sEl = document.getElementById(subId);
+      if (sEl) {
+        const pct = total > 0 ? Math.round(done / total * 100) : 0;
+        sEl.textContent = (subLabel || 'Instalados') + ' · ' + pct + '%';
+      }
+    }
+  };
+  setCard('mColDone',   'mCol',   d.colInstaladas || 0, d.col   || 0, 'mColPct',   'Postes');
+  setCard('mGabDone',   'mGab',   d.instalados    || 0, d.gab   || 0, 'mGabInst',  'Gabinetes');
+  setCard('mFijasDone', 'mFijas', d.fijasInst     || 0, d.fijas || 0, 'mFijasPct', 'Fijas');
+  setCard('mLPRDone',   'mLPR',   d.lprInst       || 0, d.lpr   || 0, 'mLPRPct',   'LPR');
+  setCard('mDomosDone', 'mDomos', d.domosInst     || 0, d.domos || 0);
+  setCard('mMultiDone', 'mMulti', d.domosMultiInst|| 0, d.domosMulti || 0);
+  setCard('mDobleDone', 'mDoble', d.domosDobleInst|| 0, d.domosDoble || 0);
+  setCard('mTotalDone', 'mTotal', d.camInstaladas || 0, d.total || 0);
   document.getElementById('puntosCount').textContent = d.total+' cámaras';
 
   buildAvanceISP(d);
