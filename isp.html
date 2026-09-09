@@ -367,7 +367,7 @@ td.num-servicio{padding:6px 8px}
           <th class="status-col" data-k="gabineteEnergizado">Energizado</th>
           <th data-k="gabNum">N° Gabinete</th>
           <th data-k="isp">ISP</th>
-          <th class="status-col" data-k="conect">Conectividad</th>
+          <th class="status-col" data-k="conect">Conectividad ISP</th>
           <th data-k="numServicio">N° de servicio</th>
           <th class="status-col" data-k="estadoConect">Estado de conectividad</th>
           <th class="no-sort">Foto</th>
@@ -598,8 +598,9 @@ function getConectMotivo(id) {
   return s && s.value ? s.value : '';
 }
 const CONECT_MOTIVOS = [
-  { key: 'en_servicio', label: 'En servicio' },
-  { key: 'sin_energia', label: 'Sin energía' },
+  { key: 'en_servicio', label: 'Instalada / En servicio' },
+  { key: 'sin_energia', label: 'Instalada / Sin energía' },
+  { key: 'vandalizado', label: 'Vandalizado' },
 ];
 const CONECT_MOTIVOS_MAP = CONECT_MOTIVOS.reduce((m, x) => (m[x.key] = x.label, m), {});
 function stConectCell(id) {
@@ -961,24 +962,32 @@ async function setConect(id, nextVal, motivo) {
   const row = DATA.find(r => r.id === id);
   const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
   try {
-    // Primero el motivo (si aplica), después el estado — para que la lógica auto
-    // del server tome el motivo actualizado al calcular gabineteEnergizado.
-    await fetch('/api/status', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, field: 'motivoConect', value: motivo || '' }) });
+    // Guardar motivo primero (el server aplica reglas auto al recibirlo)
+    const mResp = await fetch('/api/status', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'motivoConect', value: motivo || '', cam }) });
+    const mData = mResp.ok ? await mResp.json().catch(() => ({})) : {};
+    // Después el estado (SI/NO)
     const resp = await fetch('/api/status', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, field: 'conect', value: nextVal, cam }) });
     if (resp.status === 401) { location.href = '/login'; return; }
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const d = await resp.json();
+    const d = await resp.json().catch(() => ({}));
     window.SERVER_STATUS = window.SERVER_STATUS || {};
     window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
     window.SERVER_STATUS[id].conect       = { value: nextVal, by: '(vos)', at: new Date().toISOString() };
     window.SERVER_STATUS[id].motivoConect = { value: motivo || '', by: '(vos)', at: new Date().toISOString() };
-    // Regla automática del server: si motivo=sin_energia, gabineteEnergizado pasa a 'no'.
-    if (d && d.autoGab) {
-      window.SERVER_STATUS[id].gabineteEnergizado = { value: d.autoGab.next, by: 'auto', at: new Date().toISOString() };
+    // Aplicar reglas automáticas del server (autoGab del energizado, autoEstado del gabinete)
+    const autoGab    = d.autoGab    || mData.autoGab;
+    const autoEstado = d.autoEstado || mData.autoEstado;
+    if (autoGab) {
+      window.SERVER_STATUS[id].gabineteEnergizado = { value: autoGab.next, by: 'auto (' + (autoGab.reason || '') + ')', at: new Date().toISOString() };
       const btnE = document.querySelector('[data-energizado-id="' + CSS.escape(id) + '"]');
       if (btnE) { const t = btnE.closest('td'); if (t) t.outerHTML = stEnergizadoCell(id); }
+    }
+    if (autoEstado) {
+      window.SERVER_STATUS[id].gabineteEstado = { value: autoEstado.next, by: 'auto (' + (autoEstado.reason || '') + ')', at: new Date().toISOString() };
+      const btnG = document.querySelector('[data-gabinete-id="' + CSS.escape(id) + '"]');
+      if (btnG) { const t = btnG.closest('td'); if (t) t.outerHTML = stGabineteCell(id); }
     }
     const btn = document.querySelector('[data-conect-id="' + CSS.escape(id) + '"]');
     if (btn) { const td = btn.closest('td'); if (td) td.outerHTML = stConectCell(id); }

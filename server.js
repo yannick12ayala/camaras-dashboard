@@ -532,8 +532,9 @@ const server = http.createServer(async (req, res) => {
       motivoSinServicio: ['onu_alarmada', 'fibra_cortada', 'sin_energia', 'vandalizado', ''],
       // Conectividad instalada (antes era localStorage; ahora compartido en server)
       conect: ['si', 'no', ''],
-      // Motivo al marcar conect='si': si es 'sin_energia' → gabineteEnergizado se pone en 'no' automáticamente
-      motivoConect: ['en_servicio', 'sin_energia', ''],
+      // Motivo al marcar conect='si': 'sin_energia' apaga el energizado;
+      // 'vandalizado' apaga el energizado Y marca el gabinete como vandalizado.
+      motivoConect: ['en_servicio', 'sin_energia', 'vandalizado', ''],
       // Gabinete energizado (independiente del gabinete instalado)
       gabineteEnergizado: ['si', 'no', ''],
       // Estado del gabinete físico (compartido/persistente). 'vandalizado' se
@@ -577,8 +578,13 @@ const server = http.createServer(async (req, res) => {
         autoEstado = { prev, next: nextVal, reason };
       }
     };
-    // A) Al INSTALAR conectividad con motivo sin_energia → solo apaga energizado (no toca el estado físico)
+    // A) Al INSTALAR conectividad con motivo sin_energia → apaga energizado (ámbar)
     if (field === 'motivoConect' && value === 'sin_energia') setAutoGab('no', 'sin energía');
+    // A') Al INSTALAR conectividad con motivo vandalizado → gabinete = vandalizado + energizado = SIN SERVICIO
+    if (field === 'motivoConect' && value === 'vandalizado') {
+      setAutoEstado('vandalizado', 'vandalizado');
+      setAutoGab('no', 'vandalizado');
+    }
     // B) Estado ISP sin servicio con motivo sin_energia → apaga energizado (ámbar)
     if (field === 'motivoSinServicio' && value === 'sin_energia') setAutoGab('no', 'sin energía');
     // B') Estado ISP sin servicio con motivo VANDALIZADO → gabinete estado='vandalizado' + energizado='no' con reason 'vandalizado'
