@@ -360,8 +360,6 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
 
   <div class="filters">
     <input type="search" id="q" class="grow" placeholder="Buscar por ID, dirección o barrio…">
-    <select id="fLoc" aria-label="Localidad"><option value="">Todas las localidades</option></select>
-    <select id="fBarrio" aria-label="Barrio"><option value="">Todos los barrios</option></select>
     <select id="fLote" aria-label="Lote">
       <option value="">Todos los lotes</option>
       <option value="__SIN__">Sin lote asignado</option>
@@ -538,16 +536,6 @@ function setStatus(id, col, val){
 
 // Filters
 const uniq = (arr) => [...new Set(arr.filter(x=>x && x.trim()))].sort((a,b)=>a.localeCompare(b,'es'));
-uniq(DATA.map(r=>r.loc)).forEach(l => $('fLoc').insertAdjacentHTML('beforeend', `<option value="${l}">${l}</option>`));
-
-function refreshBarrios(){
-  const loc = $('fLoc').value;
-  const cur = $('fBarrio').value;
-  const barrios = uniq(DATA.filter(r => !loc || r.loc===loc).map(r=>r.barrio));
-  $('fBarrio').innerHTML = `<option value="">Todos los barrios</option>` +
-    barrios.map(b => `<option value="${b}"${b===cur?' selected':''}>${b}</option>`).join('');
-}
-refreshBarrios();
 
 let sortK = 'id', sortDir = 1;
 document.querySelectorAll('#tbl thead th[data-k]').forEach(th => {
@@ -558,17 +546,15 @@ document.querySelectorAll('#tbl thead th[data-k]').forEach(th => {
   });
 });
 $('q').addEventListener('input', render);
-$('fLoc').addEventListener('change', () => { refreshBarrios(); render(); });
-$('fBarrio').addEventListener('change', render);
 if ($('fLote'))     $('fLote').addEventListener('change', render);
 if ($('fISP'))      $('fISP').addEventListener('change', render);
 if ($('fProblema')) $('fProblema').addEventListener('change', render);
 $('clear').addEventListener('click', () => {
-  $('q').value=''; $('fLoc').value=''; $('fBarrio').value='';
+  $('q').value='';
   if ($('fLote'))     $('fLote').value = '';
   if ($('fISP'))      $('fISP').value  = '';
   if ($('fProblema')) $('fProblema').value = '';
-  refreshBarrios(); render();
+  render();
 });
 $('resetBtn').addEventListener('click', () => {
   if(!confirm('¿Restablecer todos los estados de Postes/Gabinete/Conectividad a los valores originales del Excel?')) return;
@@ -844,7 +830,8 @@ function stQaCell(id) {
 
 function render(){
   const term = $('q').value.trim().toLowerCase();
-  const flL = $('fLoc').value, flB = $('fBarrio').value;
+  const flL = $('fLoc') ? $('fLoc').value : '';
+  const flB = $('fBarrio') ? $('fBarrio').value : '';
   const flLote = $('fLote') ? $('fLote').value : '';
   const flISP  = $('fISP')  ? $('fISP').value  : '';
   const flProb = $('fProblema') ? $('fProblema').value : '';
