@@ -542,7 +542,7 @@ const server = http.createServer(async (req, res) => {
       // usa cuando el motivo de "Sin servicio" es vandalismo.
       gabineteEstado: ['si', 'no', 'vandalizado', ''],
     };
-    const freeText = { numServicio: 60 }; // { campo: maxLen }
+    const freeText = { numServicio: 60, cantidadMB: 20 }; // { campo: maxLen }
     if (closed[field]) {
       if (!closed[field].includes(value)) return json(res, 400, { error: 'valor no permitido para ' + field });
     } else if (field in freeText) {

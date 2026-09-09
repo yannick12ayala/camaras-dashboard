@@ -297,15 +297,16 @@ tr.history-row .h-time{font-family:'JetBrains Mono',monospace; color:var(--ink-2
 tr.history-row .h-by{color:var(--ink)}
 
 /* Columna N° de servicio (input editable) */
-td.num-servicio{padding:6px 8px}
-.num-servicio-input{
+td.num-servicio, td.cantidad-mb{padding:6px 8px}
+.num-servicio-input, .cantidad-mb-input{
   width:110px; padding:5px 8px; border:1px solid var(--line); border-radius:5px;
   background:var(--bg); color:var(--ink); font:inherit; font-size:12px;
   font-family:'JetBrains Mono',monospace; outline:none; transition:border-color .15s, background .3s;
 }
-.num-servicio-input:focus{border-color:var(--accent); background:var(--surf)}
-.num-servicio-input.saving{opacity:.55}
-.num-servicio-input.saved{border-color:var(--good); background:var(--good-soft)}
+.cantidad-mb-input{width:80px}
+.num-servicio-input:focus, .cantidad-mb-input:focus{border-color:var(--accent); background:var(--surf)}
+.num-servicio-input.saving, .cantidad-mb-input.saving{opacity:.55}
+.num-servicio-input.saved, .cantidad-mb-input.saved{border-color:var(--good); background:var(--good-soft)}
 </style>
 
 <div class="wrap">
@@ -361,6 +362,7 @@ td.num-servicio{padding:6px 8px}
           <th data-k="barrio">Barrio</th>
           <th data-k="loc">Localidad</th>
           <th data-k="tipo">Tipo de cámara</th>
+          <th data-k="cantidadMB">Cantidad de MB</th>
           <th data-k="coord">Coordenadas</th>
           <th class="status-col" data-k="postes">Postes</th>
           <th class="status-col" data-k="gabinete">Gabinete</th>
@@ -533,6 +535,20 @@ function numServicioCell(id) {
   const esc = (val || '').replace(/"/g, '&quot;');
   return '<td class="num-servicio"><input class="num-servicio-input" data-num-id="' + id +
          '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="60"></td>';
+}
+// Cantidad de MB: input editable, persistente en el server
+function getCantidadMB(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].cantidadMB;
+  return s && s.value != null ? String(s.value) : '';
+}
+function cantidadMBCell(id) {
+  const val = getCantidadMB(id);
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].cantidadMB;
+  const tip = s ? ('Último cambio: ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+                : 'Ingresá la cantidad de MB y hacé Tab o Enter';
+  const esc = (val || '').replace(/"/g, '&quot;');
+  return '<td class="cantidad-mb"><input class="cantidad-mb-input" data-mb-id="' + id +
+         '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="20"></td>';
 }
 // Motivos del menú de "Instalación de cámara".
 // 'en_servicio' → estado = con (verde). El resto → estado = sin con motivo.
@@ -735,6 +751,7 @@ function render(){
       <td class="barrio">${r.barrio || ''}</td>
       <td class="loc">${r.loc || ''}</td>
       <td><div class="chips">${chips}</div></td>
+      ${cantidadMBCell(r.id)}
       <td class="coord">
         <div>${coordText}</div>
         <div style="margin-top:5px">${gmap}</div>
@@ -809,6 +826,7 @@ async function toggleHistoryRow(idTd) {
       estadoConect:     'Estado',
       motivoSinServicio: 'Motivo',
       numServicio:      'N° servicio',
+      cantidadMB:       'Cantidad de MB',
     };
     const rows = entries.map(e => {
       const when = new Date(e.ts).toLocaleString('es-AR');
@@ -867,13 +885,46 @@ async function saveNumServicio(input) {
 document.addEventListener('blur', (e) => {
   const inp = e.target.closest && e.target.closest('.num-servicio-input');
   if (inp) saveNumServicio(inp);
+  const inpMB = e.target.closest && e.target.closest('.cantidad-mb-input');
+  if (inpMB) saveCantidadMB(inpMB);
 }, true);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
-    const inp = e.target.closest && e.target.closest('.num-servicio-input');
+    const inp = e.target.closest && e.target.closest('.num-servicio-input, .cantidad-mb-input');
     if (inp) { inp.blur(); }
   }
 });
+
+// Cantidad de MB: guardar al perder foco (blur) o al Enter
+async function saveCantidadMB(input) {
+  const id = input.dataset.mbId;
+  if (!id) return;
+  const value = input.value.trim();
+  const prev = getCantidadMB(id);
+  if (value === prev) return;
+  input.disabled = true;
+  input.classList.add('saving');
+  try {
+    const resp = await fetch('/api/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'cantidadMB', value }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].cantidadMB = { value, by: '(vos)', at: new Date().toISOString() };
+    input.classList.remove('saving');
+    input.classList.add('saved');
+    setTimeout(() => input.classList.remove('saved'), 1200);
+  } catch (err) {
+    alert('No se pudo guardar la Cantidad de MB: ' + err.message);
+    input.value = prev;
+  } finally {
+    input.disabled = false;
+  }
+}
 
 // Guarda estado + motivo (2 POSTs: primero motivo, después estado para que el
 // email tome el motivo actualizado). Repinta la celda in-place.
