@@ -536,6 +536,9 @@ const server = http.createServer(async (req, res) => {
       motivoConect: ['en_servicio', 'sin_energia', ''],
       // Gabinete energizado (independiente del gabinete instalado)
       gabineteEnergizado: ['si', 'no', ''],
+      // Estado del gabinete físico (compartido/persistente). 'vandalizado' se
+      // usa cuando el motivo de "Sin servicio" es vandalismo.
+      gabineteEstado: ['si', 'no', 'vandalizado', ''],
     };
     const freeText = { numServicio: 60 }; // { campo: maxLen }
     if (closed[field]) {
@@ -558,7 +561,8 @@ const server = http.createServer(async (req, res) => {
     //  C) Si el ESTADO INSTALACIÓN ISP vuelve a 'con' (reparado), y el gabinete
     //     había quedado en 'no' PONIENDO POR AUTOMÁTICO (by empieza con 'auto'),
     //     el gabinete vuelve a 'si'.
-    let autoGab = null;
+    let autoGab = null;      // sobre gabineteEnergizado
+    let autoEstado = null;   // sobre gabineteEstado
     const setAutoGab = (nextVal, reason) => {
       const prevGab = (all[id].gabineteEnergizado && all[id].gabineteEnergizado.value) || null;
       if (prevGab !== nextVal) {
@@ -566,21 +570,40 @@ const server = http.createServer(async (req, res) => {
         autoGab = { prev: prevGab, next: nextVal, reason };
       }
     };
+    const setAutoEstado = (nextVal, reason) => {
+      const prev = (all[id].gabineteEstado && all[id].gabineteEstado.value) || null;
+      if (prev !== nextVal) {
+        all[id].gabineteEstado = { value: nextVal, by: 'auto (' + reason + ')', at: new Date().toISOString() };
+        autoEstado = { prev, next: nextVal, reason };
+      }
+    };
+    // A) Al INSTALAR conectividad con motivo sin_energia → solo apaga energizado (no toca el estado físico)
     if (field === 'motivoConect' && value === 'sin_energia') setAutoGab('no', 'sin energía');
-    if (field === 'motivoSinServicio' && (value === 'sin_energia' || value === 'vandalizado')) {
-      setAutoGab('no', value === 'sin_energia' ? 'sin energía' : 'vandalizado');
+    // B) Estado ISP sin servicio con motivo sin_energia → apaga energizado (ámbar)
+    if (field === 'motivoSinServicio' && value === 'sin_energia') setAutoGab('no', 'sin energía');
+    // B') Estado ISP sin servicio con motivo VANDALIZADO → gabinete estado='vandalizado' + energizado='no' con reason 'vandalizado'
+    if (field === 'motivoSinServicio' && value === 'vandalizado') {
+      setAutoEstado('vandalizado', 'vandalizado');
+      setAutoGab('no', 'vandalizado');
     }
+    // C) Reparado: estadoConect vuelve a 'con'
     if (field === 'estadoConect' && value === 'con' && prev === 'sin') {
-      // Se reparó. Si el gabinete estaba en 'no' por regla automática, lo restauramos.
       const gab = all[id].gabineteEnergizado;
       if (gab && gab.value === 'no' && typeof gab.by === 'string' && gab.by.startsWith('auto')) {
         setAutoGab('si', 'reparado');
+      }
+      const est = all[id].gabineteEstado;
+      if (est && est.value === 'vandalizado' && typeof est.by === 'string' && est.by.startsWith('auto')) {
+        setAutoEstado('si', 'reparado');
       }
     }
     saveStatuses(all);
     appendLog({ ts: new Date().toISOString(), by: sess.username, id, field, prev, next: value });
     if (autoGab) {
       appendLog({ ts: new Date().toISOString(), by: 'sistema (auto)', id, field: 'gabineteEnergizado', prev: autoGab.prev, next: autoGab.next });
+    }
+    if (autoEstado) {
+      appendLog({ ts: new Date().toISOString(), by: 'sistema (auto)', id, field: 'gabineteEstado', prev: autoEstado.prev, next: autoEstado.next });
     }
     // Disparar notificación por email para estadoConect (async, no bloquea la respuesta)
     if (field === 'estadoConect' && prev !== value) {
@@ -594,7 +617,7 @@ const server = http.createServer(async (req, res) => {
       notifyGabinete({ id, field, prev, next: value, by: sess.username, cam: body.cam || null, autoGab })
         .catch(e => console.log('[notify gab] error:', e.message));
     }
-    return json(res, 200, { ok: true, prev, next: value, autoGab });
+    return json(res, 200, { ok: true, prev, next: value, autoGab, autoEstado });
   }
   // Historial (últimas N entradas del log)
   if (m === 'GET' && url === '/api/status/log') {

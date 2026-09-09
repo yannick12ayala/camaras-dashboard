@@ -170,6 +170,18 @@ td.coord{font-family:'JetBrains Mono',monospace; font-size:11.5px; white-space:n
   :root:not([data-theme="light"]) .status.sin-energia{color:#f5a623; background:rgba(245,166,35,0.15)}
 }
 :root[data-theme="dark"] .status.sin-energia{color:#f5a623; background:rgba(245,166,35,0.15)}
+
+/* VANDALIZADO (rojo bordó, para el botón Gabinete) */
+.status.vandalizado{color:#8b0000; background:rgba(193,59,42,0.18); border-color:rgba(193,59,42,0.55); font-size:10.5px; font-weight:700; letter-spacing:.04em}
+.status.vandalizado .dot{background:#8b0000; box-shadow:0 0 0 3px rgba(139,0,0,0.25), 0 0 8px rgba(139,0,0,0.6)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .status.vandalizado{color:#ff6b6b; background:rgba(193,59,42,0.2)}
+}
+:root[data-theme="dark"] .status.vandalizado{color:#ff6b6b; background:rgba(193,59,42,0.2)}
+
+/* SIN SERVICIO (rojo intenso, para el botón Energizado cuando el gabinete está vandalizado) */
+.status.sin-servicio{color:var(--bad); background:var(--bad-soft); border-color:color-mix(in oklab, var(--bad) 40%, transparent); font-size:10.5px; font-weight:700; letter-spacing:.04em}
+.status.sin-servicio .dot{background:var(--bad); box-shadow:0 0 0 3px color-mix(in oklab, var(--bad) 30%, transparent), 0 0 8px color-mix(in oklab, var(--bad) 60%, transparent)}
 .status.edited::after{
   content:''; width:5px; height:5px; border-radius:50%; background:var(--accent); margin-left:2px;
 }
@@ -533,6 +545,24 @@ function getMotivo(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].motivoSinServicio;
   return s && s.value ? s.value : '';
 }
+// Estado físico del gabinete (persistente en el server, compartido)
+// Valores: 'si' | 'no' | 'vandalizado' | ''
+function getGabEstado(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEstado;
+  return s && s.value ? s.value : '';
+}
+function stGabineteCell(id) {
+  const val = getGabEstado(id);
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEstado;
+  const isVand = val === 'vandalizado';
+  const isOn = val === 'si';
+  const cls = isVand ? 'vandalizado' : (isOn ? 'si' : 'no');
+  const label = isVand ? 'VANDALIZADO' : (isOn ? 'SÍ' : 'NO');
+  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar';
+  return '<td class="status-col"><button class="status gabinete-srv ' + cls +
+         '" data-gabinete-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
+}
+
 // Gabinete energizado (persistente en el server, compartido)
 function getEnergizado(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEnergizado;
@@ -542,14 +572,17 @@ function stEnergizadoCell(id) {
   const val = getEnergizado(id);
   const isOn = val === 'si';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEnergizado;
-  // El botón muestra "SIN ENERGÍA" (ámbar) cuando quedó apagado por una
-  // regla automática — hoy hay 3 casos:
-  //  1) Conectividad SÍ con motivo "Sin energía"
-  //  2) Estado ISP "Sin servicio" con motivo "Sin energía"
-  //  3) Estado ISP "Sin servicio" con motivo "Vandalizado"
+  // Casos automáticos:
+  //  1) Vandalizado → botón rojo "SIN SERVICIO"
+  //  2) Sin energía → botón ámbar "SIN ENERGÍA"
+  //  3) Sin motivo específico (manual NO) → botón rojo "NO"
   const isAutoOff = !isOn && s && typeof s.by === 'string' && s.by.startsWith('auto');
-  const cls = isOn ? 'si' : (isAutoOff ? 'sin-energia' : 'no');
-  const label = isOn ? 'SÍ' : (isAutoOff ? 'SIN ENERGÍA' : 'NO');
+  const isVand    = isAutoOff && s.by.indexOf('vandalizado') >= 0;
+  let cls, label;
+  if (isOn)         { cls = 'si';           label = 'SÍ'; }
+  else if (isVand)  { cls = 'sin-servicio'; label = 'SIN SERVICIO'; }
+  else if (isAutoOff){ cls = 'sin-energia'; label = 'SIN ENERGÍA'; }
+  else              { cls = 'no';           label = 'NO'; }
   const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar';
   return '<td class="status-col"><button class="status energizado ' + cls +
          '" data-energizado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
@@ -692,7 +725,7 @@ function render(){
         <div style="margin-top:5px">${gmap}</div>
       </td>
       ${stCell('postes')}
-      ${stCell('gabinete')}
+      ${stGabineteCell(r.id)}
       ${stEnergizadoCell(r.id)}
       ${gabNumCell}
       <td class="isp">${r.isp || '—'}</td>
@@ -855,13 +888,21 @@ async function setEstadoSinMotivo(id, nextEstado, motivo) {
     window.SERVER_STATUS[id].estadoConect     = { value: nextEstado, by: '(vos)', at: new Date().toISOString() };
     window.SERVER_STATUS[id].motivoSinServicio = { value: motivo || '', by: '(vos)', at: new Date().toISOString() };
     // Aplicar auto-cambio del gabinete si el server lo indicó
-    const autoGab = eData.autoGab || mData.autoGab;
+    const autoGab    = eData.autoGab    || mData.autoGab;
+    const autoEstado = eData.autoEstado || mData.autoEstado;
     if (autoGab) {
       window.SERVER_STATUS[id].gabineteEnergizado = {
         value: autoGab.next, by: 'auto (' + (autoGab.reason || '') + ')', at: new Date().toISOString(),
       };
       const btnE = document.querySelector('[data-energizado-id="' + CSS.escape(id) + '"]');
       if (btnE) { const t = btnE.closest('td'); if (t) t.outerHTML = stEnergizadoCell(id); }
+    }
+    if (autoEstado) {
+      window.SERVER_STATUS[id].gabineteEstado = {
+        value: autoEstado.next, by: 'auto (' + (autoEstado.reason || '') + ')', at: new Date().toISOString(),
+      };
+      const btnG = document.querySelector('[data-gabinete-id="' + CSS.escape(id) + '"]');
+      if (btnG) { const t = btnG.closest('td'); if (t) t.outerHTML = stGabineteCell(id); }
     }
     // Re-render solo la celda (evita full re-render)
     const btn = document.querySelector('[data-estado-id="' + CSS.escape(id) + '"]');
@@ -872,6 +913,27 @@ async function setEstadoSinMotivo(id, nextEstado, motivo) {
   } catch (err) {
     alert('No se pudo guardar el estado: ' + err.message);
   }
+}
+
+// ── Toggle "Gabinete" (persistente en server, con 3 estados: SÍ / NO / VANDALIZADO) ──
+// Al clic manual: SÍ ↔ NO. El estado 'vandalizado' solo se pone por la regla auto.
+async function toggleGabinete(id) {
+  const cur = getGabEstado(id);
+  const nxt = cur === 'si' ? 'no' : 'si';
+  try {
+    const resp = await fetch('/api/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'gabineteEstado', value: nxt,
+        cam: DATA.find(r => r.id === id) || null }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].gabineteEstado = { value: nxt, by: '(vos)', at: new Date().toISOString() };
+    const btn = document.querySelector('[data-gabinete-id="' + CSS.escape(id) + '"]');
+    if (btn) { const td = btn.closest('td'); if (td) td.outerHTML = stGabineteCell(id); }
+  } catch (err) { alert('No se pudo guardar: ' + err.message); }
 }
 
 // ── Toggle "Gabinete energizado" (persistente en server) ──
@@ -1002,6 +1064,10 @@ document.addEventListener('click', async (e) => {
   // ── Botón Foto (abre modal) ──
   const fotoBtn = e.target.closest && e.target.closest('[data-foto-id]');
   if (fotoBtn) { await openFotoModal(fotoBtn.dataset.fotoId); return; }
+
+  // ── Toggle Gabinete (SI/NO) ──
+  const gabBtn = e.target.closest && e.target.closest('[data-gabinete-id]');
+  if (gabBtn) { await toggleGabinete(gabBtn.dataset.gabineteId); return; }
 
   // ── Toggle Gabinete Energizado ──
   const engBtn = e.target.closest && e.target.closest('[data-energizado-id]');
