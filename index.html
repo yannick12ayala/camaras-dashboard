@@ -55,6 +55,13 @@
   .section-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text2); margin-bottom: 1rem; margin-top: 2rem; display: flex; align-items: center; gap: 8px; }
   .section-label::after { content:''; flex:1; height:1px; background:var(--border); }
 
+  /* Filtro global por ISP */
+  .isp-filter { display:flex; flex-wrap:wrap; gap:8px; margin: .5rem 0 1.5rem; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+  .isp-filter-btn { background: transparent; color: var(--text2); border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600; letter-spacing: .02em; cursor: pointer; transition: all .15s; font-family: inherit; }
+  .isp-filter-btn:hover { color: var(--text1); border-color: var(--border2); background: var(--surface2); }
+  .isp-filter-btn.active { background: linear-gradient(135deg, #4d8ef0, #6366f1); color: #fff; border-color: transparent; box-shadow: 0 2px 8px rgba(77,142,240,.3); }
+  .isp-filter-btn.active:hover { color: #fff; background: linear-gradient(135deg, #5d9ef8, #7376ff); }
+
   .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
   .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.1rem 1.25rem; position: relative; overflow: hidden; transition: border-color 0.2s; }
   .metric-card:hover { border-color: var(--border2); }
@@ -415,6 +422,15 @@
 </div>
 
 <main>
+  <!-- Filtro global por ISP: al seleccionar uno, todo el panel muestra solo esos puntos -->
+  <div class="isp-filter" id="ispFilter">
+    <button class="isp-filter-btn active" data-isp="__ALL__">Todos los ISP</button>
+    <button class="isp-filter-btn" data-isp="METROTEL">Metrotel</button>
+    <button class="isp-filter-btn" data-isp="F2H">F2H</button>
+    <button class="isp-filter-btn" data-isp="TELVISO">Telviso</button>
+    <button class="isp-filter-btn" data-isp="BIBOP">Bibop</button>
+  </div>
+
   <div class="section-label">Resumen general</div>
   <div class="metrics-grid">
     <div class="metric-card teal">
@@ -658,7 +674,8 @@ async function loadData() {
     } catch {
       window.PDF_LINKS = {}; window.SERVER_STATUS = {}; window.IDS_QUE_TUVIERON_SIN = new Set();
     }
-    processRows(XLSX.utils.sheet_to_json(ws, { defval: 0 }));
+    window.ALL_ROWS = XLSX.utils.sheet_to_json(ws, { defval: 0 });
+    processRows(window.ALL_ROWS);
     // Parse Observaciones sheet
     const obsSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('observ') || n.toLowerCase().includes('comentar'));
     if (obsSheetName) {
@@ -686,11 +703,18 @@ function findCol(keys, ...terms) {
 }
 
 function processRows(rows) {
-  const dataRows = rows.filter(r => {
+  let dataRows = rows.filter(r => {
     const id = r[Object.keys(r)[0]];
     return id && String(id).trim().match(/^\d{4}$/);
   });
   if (!dataRows.length) { setSyncState('error', 'No se encontraron filas válidas.'); return; }
+  // Filtro global por ISP (botones arriba). Se aplica antes de calcular todo.
+  const activeIsp = window.ACTIVE_ISP;
+  if (activeIsp && activeIsp !== '__ALL__') {
+    const ispKey = (Object.keys(dataRows[0]).find(k => k.trim().toLowerCase() === 'isp') || 'ISP');
+    dataRows = dataRows.filter(r => String(r[ispKey]||'').trim().toUpperCase() === activeIsp);
+    if (!dataRows.length) { setSyncState('ok', `Sin puntos asignados a <strong>${activeIsp}</strong>`); }
+  }
 
   // DEBUG - mostrar headers y valor conectividad del primer row
   const allKeys = Object.keys(dataRows[0]);
@@ -1515,6 +1539,20 @@ function renderObservaciones(rows) {
 // ── END MAP ──────────────────────────────────────────
 
 loadData();
+
+// Filtro global por ISP: al cliquear, marca el botón activo y re-procesa las filas
+window.ACTIVE_ISP = '__ALL__';
+document.getElementById('ispFilter').addEventListener('click', (e) => {
+  const btn = e.target.closest('.isp-filter-btn');
+  if (!btn) return;
+  document.querySelectorAll('.isp-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  window.ACTIVE_ISP = btn.dataset.isp;
+  if (window.ALL_ROWS && window.ALL_ROWS.length) {
+    destroyCharts();
+    processRows(window.ALL_ROWS);
+  }
+});
 
 // ── NUEVAS FUNCIONES ─────────────────────────────────────────
 function renderProblemas(rows) {
