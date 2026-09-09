@@ -1041,6 +1041,7 @@ function buildAvanceInstalacion(d) {
     { key: 'col',   name: 'Postes',        done: d.colInstaladas    || 0, total: d.col   || 0, color: '#22d3ee' },
     { key: 'gab',   name: 'Gabinetes',     done: d.instalados       || 0, total: d.gab   || 0, color: '#4d8ef0' },
     { key: 'con',   name: 'Conectividad',  done: d.conectividadCount|| 0, total: d.totalPuntos || 0, color: '#22d3ee' },
+    { key: 'qa',    name: 'QA',            done: d.qaAprobados      || 0, total: d.totalPuntos || 0, color: '#f5a623' },
     { key: 'dispo', name: 'Dispositivos',  done: d.camInstaladas    || 0, total: d.total || 0, color: '#3ecf8e' },
   ];
   rows.forEach(r => renderDonut(cont, 'inst_' + r.key, r.name, r.done, r.total, r.color));
