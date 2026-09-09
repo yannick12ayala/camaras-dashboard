@@ -131,9 +131,14 @@
   .donut-card .d-legend .lg.total { grid-column: 1 / -1; padding-top: 4px; border-top: 1px solid var(--border); margin-top: 2px; }
 
   /* Avance ISP: grilla fija de 4 columnas iguales (una por ISP) */
-  .isp-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-  @media (max-width: 1100px) { .isp-grid-4 { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 560px)  { .isp-grid-4 { grid-template-columns: 1fr; } }
+  .isp-grid-4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .isp-grid-4 { grid-template-columns: 1fr; } }
+  /* Cada ISP en Avance de conectividad: barras a la izquierda + donut de QA a la derecha */
+  .avance-isp-cell { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: stretch; }
+  .avance-isp-cell .avance-isp-left { min-width: 0; }
+  .avance-isp-cell .avance-isp-right { display: flex; align-items: center; }
+  .avance-isp-cell .donut-card { min-width: 170px; }
+  @media (max-width: 560px)  { .avance-isp-cell { grid-template-columns: 1fr; } }
 
   /* Barras horizontales para avance ISP */
   .bar-card {
@@ -510,7 +515,7 @@
       <span style="color:#f5a623;font-weight:600">■ Factible</span> (poste + gabinete listos) &nbsp;·&nbsp;
       <span style="color:#22d3ee;font-weight:600">■ Instalado</span> (conectividad tendida) &nbsp;·&nbsp;
       <span style="color:#3ecf8e;font-weight:600">■ Con servicio</span> (funcionando) &nbsp;·&nbsp;
-      <span style="color:#a78bfa;font-weight:600">■ QA aprobado</span> (calidad del servicio validada)
+      <span style="color:#f5a623;font-weight:600">🎯 QA</span> aparte a la derecha de cada ISP
     </div>
     <div id="avanceIspGrid" class="isp-grid-4"></div>
   </div>
@@ -980,12 +985,11 @@ const RING = {
   bg:   '#232838',
 };
 
-// Gráfico de barras horizontales por ISP: 4 barras (fact/inst/serv/qa) sobre el total.
-function renderBarChart(container, key, name, factibles, installed, withService, qaAprobados, total) {
+// Gráfico de barras horizontales por ISP: 3 barras (fact/inst/serv) sobre el total.
+function renderBarChart(container, key, name, factibles, installed, withService, total) {
   const pctFact = total > 0 ? Math.round(factibles   / total * 100) : 0;
   const pctInst = total > 0 ? Math.round(installed   / total * 100) : 0;
   const pctSrv  = total > 0 ? Math.round(withService / total * 100) : 0;
-  const pctQA   = total > 0 ? Math.round(qaAprobados / total * 100) : 0;
 
   const bar = (val, pct, color, label) =>
     '<div class="bar-row">' +
@@ -1011,7 +1015,6 @@ function renderBarChart(container, key, name, factibles, installed, withService,
       bar(factibles,   pctFact, RING.fact, 'Factible') +
       bar(installed,   pctInst, RING.inst, 'Instalado') +
       bar(withService, pctSrv,  RING.serv, 'Con servicio') +
-      bar(qaAprobados, pctQA,   RING.qa,   'QA aprobado') +
     '</div>';
   container.appendChild(card);
 }
@@ -1020,8 +1023,8 @@ function buildAvanceISP(d) {
   const cont = document.getElementById('avanceIspGrid');
   if (!cont) return;
   cont.innerHTML = '';
-  // Destruir donuts previos
-  Object.keys(charts).filter(k => k.startsWith('donut_isp_')).forEach(k => { charts[k].destroy(); delete charts[k]; });
+  // Destruir donuts previos (incluidos los QA por ISP)
+  Object.keys(charts).filter(k => k.startsWith('donut_isp_') || k.startsWith('donut_ispqa_')).forEach(k => { charts[k].destroy(); delete charts[k]; });
   const isps = Object.keys(d.isp || {}).sort();
   if (!isps.length) {
     cont.innerHTML = '<div style="grid-column:1/-1;color:var(--text3);font-size:12px;padding:14px 4px">Sin datos por ISP</div>';
@@ -1035,7 +1038,18 @@ function buildAvanceISP(d) {
     const withService = stats.conServicio || 0; // con servicio activo (portal ISP: estadoConect = 'con')
     const qaAprobados = stats.qaAprobados || 0; // QA valida cómo dejó el servicio el ISP
     const color = (typeof ISP_COLORS !== 'undefined' && ISP_COLORS[name]) || '#4d8ef0';
-    renderBarChart(cont, 'isp_' + name.replace(/\W/g, '_'), name, factibles, installed, withService, qaAprobados, total);
+    // Cada ISP: [barras a la izquierda] + [donut de QA a la derecha], en una celda flex
+    const cell = document.createElement('div');
+    cell.className = 'avance-isp-cell';
+    const left = document.createElement('div');
+    left.className = 'avance-isp-left';
+    const right = document.createElement('div');
+    right.className = 'avance-isp-right';
+    cell.appendChild(left);
+    cell.appendChild(right);
+    cont.appendChild(cell);
+    renderBarChart(left, 'isp_' + name.replace(/\W/g, '_'), name, factibles, installed, withService, total);
+    renderDonut(right, 'ispqa_' + name.replace(/\W/g, '_'), 'QA', qaAprobados, total, '#f5a623');
   });
 }
 
