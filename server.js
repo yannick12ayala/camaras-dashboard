@@ -400,6 +400,70 @@ async function notifyFotoUpload({ id, by, cam, filename, filePath, size, caption
   }
 }
 
+// Envía UN email con todos los cambios acumulados de un punto desde la última
+// notificación. Se dispara al clickear el botón "CAMBIO DE ESTADO" del portal.
+async function notifyChangesSummary({ id, cam, by, entries }) {
+  const mailer = getMailer();
+  if (!mailer || NOTIFY_TO.length === 0) return;
+  if (!entries || !entries.length) return;
+  const FIELD_LABEL = {
+    estadoConect:     'Instalación de cámara',
+    motivoSinServicio: 'Motivo (Instalación)',
+    conect:            'Conectividad ISP',
+    motivoConect:      'Motivo (Conectividad)',
+    gabineteEstado:    'Gabinete',
+    gabineteEnergizado:'Energizado',
+    numServicio:       'N° de servicio',
+    cantidadMB:        'Cantidad de MB',
+    idDispositivo:     'ID Dispositivo',
+    qaEstado:          'QA',
+    qaMotivo:          'QA Motivo',
+    observacion:       'Observación',
+    foto:              'Foto',
+  };
+  const VAL_LABEL = {
+    con: 'Con servicio', sin: 'Sin servicio', si: 'SÍ', no: 'NO', vandalizado: 'Vandalizado',
+    en_servicio: 'En servicio', onu_alarmada: 'ONU alarmada', fibra_cortada: 'Fibra cortada',
+    sin_energia: 'Sin energía', falla_enrutamiento: 'Falla de enrutamiento',
+  };
+  const fmt = (v) => (v === null || v === undefined || v === '') ? '—' : (VAL_LABEL[v] || String(v));
+  const rowsHtml = entries.map(e => {
+    const when = new Date(e.ts).toLocaleString('es-AR');
+    const fLabel = FIELD_LABEL[e.field] || e.field;
+    return `<tr>
+      <td style="padding:6px 10px;font-size:11px;color:#888;white-space:nowrap;border-bottom:1px solid #f0f0f4">${when}</td>
+      <td style="padding:6px 10px;font-size:12px;border-bottom:1px solid #f0f0f4"><b>${fLabel}:</b> ${fmt(e.prev)} → <b>${fmt(e.next)}</b></td>
+      <td style="padding:6px 10px;font-size:11px;color:#666;border-bottom:1px solid #f0f0f4">por ${e.by || '—'}</td>
+    </tr>`;
+  }).join('');
+  const camInfo = cam ? [cam.dir, cam.barrio, cam.loc].filter(Boolean).join(' · ') : '';
+  const subject = `Cámaras · ID ${id}: ${entries.length} cambio${entries.length===1?'':'s'} — notificado por ${by}`;
+  const html = `
+    <div style="font-family:Segoe UI,Arial,sans-serif;color:#222;max-width:680px">
+      <h2 style="margin:0 0 4px">Cambios en el punto #${id}</h2>
+      <p style="color:#555;margin:0 0 6px">Portal Control de avance · Proyecto Cámaras V</p>
+      ${camInfo ? `<div style="color:#666;font-size:13px;margin:0 0 16px">${camInfo}</div>` : ''}
+      <table style="width:100%;border-collapse:collapse;border:1px solid #e5e5ec;border-radius:6px;overflow:hidden">
+        <thead style="background:#f7f7fa">
+          <tr>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.04em">Cuándo</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.04em">Cambio</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.04em">Usuario</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <p style="margin-top:22px"><a href="${DASHBOARD_URL}/isp" style="background:#4d8ef0;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;font-size:13px;font-weight:600">Abrir Portal Control de avance</a></p>
+      <p style="color:#999;font-size:11px;margin-top:22px">Este correo consolida todos los cambios acumulados desde la última notificación de este punto.</p>
+    </div>`;
+  try {
+    await mailer.sendMail({ from: SMTP_FROM, to: NOTIFY_TO.join(','), subject, html });
+    console.log('[mail-batch] enviado a', NOTIFY_TO.length, 'destinatarios ·', entries.length, 'cambios · id', id);
+  } catch (e) {
+    console.log('[mail-batch] error al enviar:', e.message);
+  }
+}
+
 const STATIC_PUBLIC = {
   '/login':         { file: 'login.html',    type: 'text/html; charset=utf-8' },
   '/manifest.json': { file: 'manifest.json', type: 'application/json; charset=utf-8' },
@@ -662,19 +726,39 @@ const server = http.createServer(async (req, res) => {
     if (autoMotivoConect) {
       appendLog({ ts: new Date().toISOString(), by: 'sistema (auto)', id, field: 'motivoConect', prev: autoMotivoConect.prev, next: autoMotivoConect.next });
     }
-    // Disparar notificación por email para estadoConect (async, no bloquea la respuesta)
-    if (field === 'estadoConect' && prev !== value) {
-      const motivo = all[id].motivoSinServicio && all[id].motivoSinServicio.value;
-      notifyEstadoChange({ id, prev, next: value, by: sess.username, cam: body.cam || null, motivo })
-        .catch(e => console.log('[notify] error:', e.message));
-    }
-    // Notificar por email cualquier cambio del gabinete energizado
-    // (manual o automático por sin_energia/vandalizado/reparado).
-    if ((field === 'gabineteEnergizado' && prev !== value) || autoGab) {
-      notifyGabinete({ id, field, prev, next: value, by: sess.username, cam: body.cam || null, autoGab })
-        .catch(e => console.log('[notify gab] error:', e.message));
-    }
+    // Los emails automáticos por cambio fueron DESACTIVADOS: ahora el operador
+    // dispara un único email por punto con el botón "CAMBIO DE ESTADO" del portal,
+    // que hace POST /api/status/notify y envía todos los cambios acumulados.
     return json(res, 200, { ok: true, prev, next: value, autoGab, autoEstado, autoMotivoConect });
+  }
+
+  // Enviar 1 email con TODOS los cambios acumulados de un punto desde la última
+  // notificación. Se llama desde el botón "CAMBIO DE ESTADO" del portal.
+  if (m === 'POST' && url === '/api/status/notify') {
+    let body = {}; try { body = JSON.parse(await readBody(req)); } catch {}
+    const id = String(body.id || '').trim();
+    if (!id) return json(res, 400, { error: 'falta id' });
+    const all = loadStatuses();
+    const lastAt = all[id] && all[id].lastNotifiedAt ? all[id].lastNotifiedAt : null;
+    let entries = [];
+    if (fs.existsSync(STATUS_LOG)) {
+      const raw = fs.readFileSync(STATUS_LOG, 'utf8').split('\n').filter(Boolean);
+      entries = raw.map(l => { try { return JSON.parse(l); } catch { return null; } })
+                   .filter(Boolean)
+                   .filter(e => String(e.id) === id);
+      if (lastAt) entries = entries.filter(e => e.ts > lastAt);
+    }
+    if (!entries.length) {
+      return json(res, 200, { ok: true, notified: 0, msg: 'Sin cambios nuevos desde la última notificación' });
+    }
+    entries.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+    const nowIso = new Date().toISOString();
+    notifyChangesSummary({ id, cam: body.cam || null, by: sess.username, entries })
+      .catch(e => console.log('[notify batch] error:', e.message));
+    all[id] = all[id] || {};
+    all[id].lastNotifiedAt = nowIso;
+    saveStatuses(all);
+    return json(res, 200, { ok: true, notified: entries.length, at: nowIso });
   }
   // Historial (últimas N entradas del log)
   if (m === 'GET' && url === '/api/status/log') {
@@ -738,10 +822,8 @@ const server = http.createServer(async (req, res) => {
       };
       fs.writeFileSync(filePath + '.json', JSON.stringify(meta, null, 2));
       appendLog({ ts: meta.at, by: sess.username, id: idClean, field: 'foto', prev: null, next: finalName });
-      // Notificar por email en background
+      // Email automático DESACTIVADO: se envía todo junto con el botón "CAMBIO DE ESTADO".
       let cam = null; try { cam = parts.cam ? JSON.parse(parts.cam) : null; } catch {}
-      notifyFotoUpload({ id: idClean, by: sess.username, cam, filename: finalName, filePath, size: info.size, caption: meta.caption })
-        .catch(e => console.log('[notify-foto] error:', e.message));
       return json(res, 200, { ok: true, file: finalName, size: info.size });
     } catch (e) {
       return json(res, 500, { error: 'no se pudo procesar la foto', detail: String(e) });

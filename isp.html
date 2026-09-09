@@ -300,7 +300,18 @@ tr.history-row .h-time{font-family:'JetBrains Mono',monospace; color:var(--ink-2
 tr.history-row .h-by{color:var(--ink)}
 
 /* Columna N° de servicio (input editable) */
-td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col{padding:6px 8px}
+td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notify-col{padding:6px 8px}
+.notify-btn{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:7px 12px; border:1px solid color-mix(in oklab, var(--accent) 40%, transparent);
+  background:color-mix(in oklab, var(--accent) 12%, transparent); color:var(--accent);
+  border-radius:6px; font:inherit; font-size:11.5px; font-weight:700; letter-spacing:.03em;
+  cursor:pointer; white-space:nowrap; transition:all .15s;
+}
+.notify-btn:hover{background:color-mix(in oklab, var(--accent) 20%, transparent); border-color:var(--accent)}
+.notify-btn:disabled{opacity:.55; cursor:default}
+.notify-btn.sending{opacity:.7; cursor:wait}
+.notify-btn.sent{background:var(--good-soft); border-color:color-mix(in oklab, var(--good) 40%, transparent); color:var(--good)}
 .num-servicio-input, .cantidad-mb-input, .id-dispositivo-input, .observacion-input{
   width:110px; padding:5px 8px; border:1px solid var(--line); border-radius:5px;
   background:var(--bg); color:var(--ink); font:inherit; font-size:12px;
@@ -382,6 +393,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col{padding:6
           <th class="no-sort">Foto</th>
           <th class="no-sort" data-k="observacion">Observaciones</th>
           <th class="no-sort">Plano</th>
+          <th class="no-sort">Notificar</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -859,6 +871,7 @@ function render(){
       ${fotoCell(r.id)}
       ${observacionCell(r.id)}
       <td>${pdf}</td>
+      <td class="notify-col"><button class="notify-btn" data-notify-id="${r.id}" title="Enviar por email todos los cambios acumulados desde la última notificación">✉ Cambio de estado</button></td>
     </tr>`;
   }).join('');
   $('tbody').innerHTML = html;
@@ -1011,6 +1024,44 @@ document.addEventListener('keydown', (e) => {
     }
     const inp = e.target.closest && e.target.closest('.num-servicio-input, .cantidad-mb-input, .id-dispositivo-input');
     if (inp) { inp.blur(); }
+  }
+});
+
+// Notificar cambios acumulados: enviar por email todos los cambios del punto
+// desde la última notificación. El server hace el filtrado por lastNotifiedAt.
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest && e.target.closest('.notify-btn');
+  if (!btn) return;
+  const id = btn.dataset.notifyId;
+  if (!id) return;
+  const row = DATA.find(r => r.id === id);
+  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
+  btn.disabled = true;
+  btn.classList.add('sending');
+  const originalText = btn.textContent;
+  btn.textContent = '⏳ Enviando…';
+  try {
+    const resp = await fetch('/api/status/notify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, cam }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json().catch(() => ({}));
+    btn.classList.remove('sending');
+    if (data.notified === 0) {
+      btn.textContent = 'ℹ Sin cambios nuevos';
+      setTimeout(() => { btn.textContent = originalText; btn.disabled = false; }, 2200);
+    } else {
+      btn.classList.add('sent');
+      btn.textContent = '✓ ' + data.notified + ' cambio' + (data.notified===1?'':'s') + ' enviados';
+      setTimeout(() => { btn.classList.remove('sent'); btn.textContent = originalText; btn.disabled = false; }, 3500);
+    }
+  } catch (err) {
+    btn.classList.remove('sending');
+    btn.textContent = originalText;
+    btn.disabled = false;
+    alert('No se pudo enviar la notificación: ' + err.message);
   }
 });
 
