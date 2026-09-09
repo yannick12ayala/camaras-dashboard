@@ -362,23 +362,50 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
     <input type="search" id="q" class="grow" placeholder="Buscar por ID, dirección o barrio…">
     <select id="fLoc" aria-label="Localidad"><option value="">Todas las localidades</option></select>
     <select id="fBarrio" aria-label="Barrio"><option value="">Todos los barrios</option></select>
-    <select id="fTipo" aria-label="Tipo de cámara">
-      <option value="">Todos los tipos</option>
-      <option value="fijas">Cámara Fija</option>
-      <option value="lpr">LPR</option>
-      <option value="multi">Domo Multisensor</option>
-      <option value="com">Domo Común</option>
-      <option value="dob">Domo Doble Imagen</option>
-      <option value="la">Domo Largo Alcance</option>
+    <select id="fLote" aria-label="Lote">
+      <option value="">Todos los lotes</option>
+      <option value="__SIN__">Sin lote asignado</option>
+      <option value="Lote 1">Lote 1</option>
+      <option value="Lote 2">Lote 2</option>
+      <option value="Lote 3">Lote 3</option>
+      <option value="Lote 4">Lote 4</option>
+      <option value="Lote 5">Lote 5</option>
+      <option value="Lote 6">Lote 6</option>
+      <option value="Lote 7">Lote 7</option>
+      <option value="Lote 8">Lote 8</option>
+      <option value="Lote 9">Lote 9</option>
+      <option value="Lote 10">Lote 10</option>
     </select>
-    <select id="fEstado" aria-label="Estado">
+    <select id="fISP" aria-label="ISP">
+      <option value="">Todos los ISP</option>
+      <option value="METROTEL">Metrotel</option>
+      <option value="F2H">F2H</option>
+      <option value="TELVISO">Telviso</option>
+      <option value="BIBOP">Bibop</option>
+    </select>
+    <select id="fProblema" aria-label="Estado / Problema">
       <option value="">Cualquier estado</option>
-      <option value="postes:si">Postes = SÍ</option>
-      <option value="postes:no">Postes = NO</option>
-      <option value="gabinete:si">Gabinete = SÍ</option>
-      <option value="gabinete:no">Gabinete = NO</option>
-      <option value="conect:si">Conectividad = SÍ</option>
-      <option value="conect:no">Conectividad = NO</option>
+      <optgroup label="Estado de conectividad">
+        <option value="conect_si">Con conectividad instalada</option>
+        <option value="conect_no">Sin conectividad instalada</option>
+        <option value="en_servicio">En servicio (funcionando)</option>
+        <option value="sin_servicio">Sin servicio (cualquier motivo)</option>
+      </optgroup>
+      <optgroup label="Problemas específicos">
+        <option value="p_vandalismo">Vandalismo</option>
+        <option value="p_sin_energia">Sin energía</option>
+        <option value="p_onu">ONU alarmada</option>
+        <option value="p_fibra">Fibra cortada</option>
+        <option value="p_enrutamiento">Falla de enrutamiento</option>
+      </optgroup>
+      <optgroup label="Otros">
+        <option value="sin_postes">Sin postes instalados</option>
+        <option value="sin_gabinete">Sin gabinete instalado</option>
+        <option value="sin_energizado">Gabinete sin energizar</option>
+        <option value="qa_ok">QA aprobado</option>
+        <option value="qa_rechazado">QA rechazado</option>
+        <option value="qa_pendiente">QA pendiente</option>
+      </optgroup>
     </select>
     <button class="clear" id="clear">Limpiar</button>
     <span class="count" id="rowCount">—</span>
@@ -533,10 +560,14 @@ document.querySelectorAll('#tbl thead th[data-k]').forEach(th => {
 $('q').addEventListener('input', render);
 $('fLoc').addEventListener('change', () => { refreshBarrios(); render(); });
 $('fBarrio').addEventListener('change', render);
-$('fTipo').addEventListener('change', render);
-$('fEstado').addEventListener('change', render);
+if ($('fLote'))     $('fLote').addEventListener('change', render);
+if ($('fISP'))      $('fISP').addEventListener('change', render);
+if ($('fProblema')) $('fProblema').addEventListener('change', render);
 $('clear').addEventListener('click', () => {
-  $('q').value=''; $('fLoc').value=''; $('fTipo').value=''; $('fEstado').value='';
+  $('q').value=''; $('fLoc').value=''; $('fBarrio').value='';
+  if ($('fLote'))     $('fLote').value = '';
+  if ($('fISP'))      $('fISP').value  = '';
+  if ($('fProblema')) $('fProblema').value = '';
   refreshBarrios(); render();
 });
 $('resetBtn').addEventListener('click', () => {
@@ -813,14 +844,58 @@ function stQaCell(id) {
 
 function render(){
   const term = $('q').value.trim().toLowerCase();
-  const flL = $('fLoc').value, flB = $('fBarrio').value, flT = $('fTipo').value, flE = $('fEstado').value;
-  const [flECol, flEVal] = flE ? flE.split(':') : [null,null];
+  const flL = $('fLoc').value, flB = $('fBarrio').value;
+  const flLote = $('fLote') ? $('fLote').value : '';
+  const flISP  = $('fISP')  ? $('fISP').value  : '';
+  const flProb = $('fProblema') ? $('fProblema').value : '';
+
+  // Helpers para leer estados persistidos del server para un id.
+  const ss = window.SERVER_STATUS || {};
+  const val = (id, field) => (ss[id] && ss[id][field] && ss[id][field].value) || '';
 
   let rows = DATA.filter(r => {
     if(flL && r.loc !== flL) return false;
     if(flB && r.barrio !== flB) return false;
-    if(flT && !r.tipos.some(t => t.k === flT)) return false;
-    if(flECol && r._st[flECol] !== flEVal) return false;
+    // Filtro por lote
+    if(flLote){
+      const cur = val(r.id, 'lote');
+      if(flLote === '__SIN__'){ if(cur) return false; }
+      else if(cur !== flLote) return false;
+    }
+    // Filtro por ISP (mayúsculas)
+    if(flISP){
+      const rispU = String(r.isp || '').trim().toUpperCase();
+      if(rispU !== flISP) return false;
+    }
+    // Filtro por estado / problema
+    if(flProb){
+      const estado    = val(r.id, 'estadoConect');
+      const motivo    = val(r.id, 'motivoSinServicio');
+      const conect    = val(r.id, 'conect');
+      const gabEst    = val(r.id, 'gabineteEstado');
+      const gabEnerg  = val(r.id, 'gabineteEnergizado');
+      const qaEstado  = val(r.id, 'qaEstado');
+      const qaMotivo  = val(r.id, 'qaMotivo');
+      const motivoC   = val(r.id, 'motivoConect');
+      const postesOk  = r._st && r._st.postes === 'si';
+      switch(flProb){
+        case 'conect_si':      if(conect !== 'si') return false; break;
+        case 'conect_no':      if(conect === 'si') return false; break;
+        case 'en_servicio':    if(estado !== 'con') return false; break;
+        case 'sin_servicio':   if(estado !== 'sin') return false; break;
+        case 'p_vandalismo':   if(motivo !== 'vandalizado' && qaMotivo !== 'vandalizado' && gabEst !== 'vandalizado') return false; break;
+        case 'p_sin_energia':  if(motivoC !== 'sin_energia' && gabEnerg !== 'no') return false; break;
+        case 'p_onu':          if(motivo !== 'onu_alarmada' && qaMotivo !== 'onu_alarmada' && motivoC !== 'onu_alarmada') return false; break;
+        case 'p_fibra':        if(motivo !== 'fibra_cortada' && qaMotivo !== 'fibra_cortada' && motivoC !== 'fibra_cortada') return false; break;
+        case 'p_enrutamiento': if(motivo !== 'falla_enrutamiento' && qaMotivo !== 'falla_enrutamiento' && motivoC !== 'falla_enrutamiento') return false; break;
+        case 'sin_postes':     if(postesOk) return false; break;
+        case 'sin_gabinete':   if(gabEst === 'si') return false; break;
+        case 'sin_energizado': if(gabEnerg === 'si') return false; break;
+        case 'qa_ok':          if(qaEstado !== 'con') return false; break;
+        case 'qa_rechazado':   if(qaEstado !== 'sin') return false; break;
+        case 'qa_pendiente':   if(qaEstado) return false; break;
+      }
+    }
     if(term){
       const hay = `${r.id} ${r.dir||''} ${r.barrio||''} ${r.loc||''}`.toLowerCase();
       if(!hay.includes(term)) return false;
