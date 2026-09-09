@@ -108,6 +108,11 @@
   .donut-card .d-sublabel { font-size: 10.5px; color: var(--text2); font-family: var(--mono); text-transform: uppercase; font-weight: 500; margin-top: 4px; }
   .donut-card .d-values { font-size: 12px; color: var(--text); font-family: var(--mono); margin-top: 4px; font-weight: 500; }
   .donut-card .d-values .unit { color: var(--text2); font-weight: 400; }
+  .donut-card .d-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; margin-top: 8px; width: 100%; padding: 0 4px; }
+  .donut-card .d-legend .lg { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text); font-family: var(--font); }
+  .donut-card .d-legend .lg .dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+  .donut-card .d-legend .lg b { margin-left: auto; font-family: var(--mono); font-weight: 700; color: var(--text); }
+  .donut-card .d-legend .lg.total { grid-column: 1 / -1; padding-top: 4px; border-top: 1px solid var(--border); margin-top: 2px; }
   .relevamiento-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
   .relevamiento-pct { font-size: 28px; font-weight: 600; color: var(--text); letter-spacing: -0.03em; }
   .relevamiento-label { font-size: 10px; color: var(--text2); font-family: var(--mono); }
@@ -437,7 +442,11 @@
   <div class="section-label">Avance de conectividad por ISP</div>
   <div class="chart-card">
     <div class="chart-title">Avance de conectividad</div>
-    <div class="chart-subtitle">Anillo exterior: puntos factibles (poste + gabinete listos) · Anillo medio: conectividad instalada · Anillo interior: con servicio activo</div>
+    <div class="chart-subtitle">
+      <span style="color:#f5a623;font-weight:600">● Amarillo</span> Factibilidad (poste + gabinete listos) &nbsp;·&nbsp;
+      <span style="color:#22d3ee;font-weight:600">● Celeste</span> Conectividad instalada &nbsp;·&nbsp;
+      <span style="color:#3ecf8e;font-weight:600">● Verde</span> Con servicio activo
+    </div>
     <div id="avanceIspGrid" class="donuts-grid"></div>
   </div>
 
@@ -911,18 +920,20 @@ function hexAlpha(hex, alpha) {
   const r = parseInt(h.substring(0,2), 16), g = parseInt(h.substring(2,4), 16), b = parseInt(h.substring(4,6), 16);
   return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
 }
-// Donut triple anillo (para Avance ISP):
-//   exterior  = factibilidad (poste + gabinete listos)   → color soft
-//   medio     = conectividad instalada                    → color pleno
-//   interior  = con servicio activo                       → color brillante
-function renderTripleDonut(container, key, name, factibles, installed, withService, total, color) {
+// Donut triple anillo (para Avance ISP): 3 anillos con colores fijos por tipo.
+//   exterior  = factibilidad (poste + gabinete listos)  → AMARILLO
+//   medio     = conectividad instalada                   → CELESTE
+//   interior  = con servicio activo                      → VERDE
+const RING = {
+  fact: '#f5a623',  // amarillo (factibilidad)
+  inst: '#22d3ee',  // celeste  (instalados)
+  serv: '#3ecf8e',  // verde    (con servicio)
+  bg:   '#232838',  // resto del anillo (gris azulado oscuro)
+};
+function renderTripleDonut(container, key, name, factibles, installed, withService, total, _colorUnused) {
   const pctFact = total > 0 ? Math.round(factibles   / total * 100) : 0;
   const pctInst = total > 0 ? Math.round(installed   / total * 100) : 0;
   const pctSrv  = total > 0 ? Math.round(withService / total * 100) : 0;
-  const baseCol = color || '#4d8ef0';
-  const colOut  = hexAlpha(baseCol, 0.4);       // factibilidad (más suave)
-  const colMid  = baseCol;                       // instalada
-  const colIn   = pctSrv >= 90 ? '#3ecf8e' : pctSrv >= 50 ? '#f5a623' : pctSrv > 0 ? baseCol : '#8b90a7'; // servicio
   const card = document.createElement('div');
   card.className = 'donut-card';
   card.innerHTML =
@@ -930,17 +941,21 @@ function renderTripleDonut(container, key, name, factibles, installed, withServi
     '<div class="d-wrap">' +
       '<canvas id="donut_' + key + '"></canvas>' +
       '<div class="d-center">' +
-        '<div class="d-pct" style="color:' + colIn + ';font-size:22px">' + pctSrv + '%</div>' +
-        '<div class="d-label" style="color:' + colIn + '">c/ servicio</div>' +
-        '<div class="d-sublabel" style="color:' + colMid + '">inst: ' + pctInst + '%</div>' +
-        '<div class="d-sublabel" style="color:var(--text2);margin-top:1px">fact: ' + pctFact + '%</div>' +
+        '<div class="d-pct" style="color:' + RING.serv + ';font-size:22px">' + pctSrv + '%</div>' +
+        '<div class="d-label" style="color:' + RING.serv + '">c/ servicio</div>' +
+        '<div class="d-sublabel" style="color:' + RING.inst + '">inst: ' + pctInst + '%</div>' +
+        '<div class="d-sublabel" style="color:' + RING.fact + '">fact: ' + pctFact + '%</div>' +
       '</div>' +
     '</div>' +
-    '<div class="d-values">' +
-      '<span style="color:' + colOut + ';font-weight:700">' + factibles + '</span> <span class="unit">fact</span> · ' +
-      '<span style="color:' + colMid + ';font-weight:700">' + installed + '</span> <span class="unit">inst</span> · ' +
-      '<span style="color:' + colIn + ';font-weight:700">' + withService + '</span> <span class="unit">serv</span> · ' +
-      '<span style="color:var(--text)">' + total + '</span> <span class="unit">total</span>' +
+    '<div class="d-legend">' +
+      '<span class="lg"><span class="dot" style="background:' + RING.fact + '"></span>Factible' +
+        '<b>' + factibles + '</b></span>' +
+      '<span class="lg"><span class="dot" style="background:' + RING.inst + '"></span>Instalado' +
+        '<b>' + installed + '</b></span>' +
+      '<span class="lg"><span class="dot" style="background:' + RING.serv + '"></span>Con servicio' +
+        '<b>' + withService + '</b></span>' +
+      '<span class="lg total"><span class="dot" style="background:var(--text2)"></span>Total' +
+        '<b>' + total + '</b></span>' +
     '</div>';
   container.appendChild(card);
   charts['donut_' + key] = new Chart(card.querySelector('canvas'), {
@@ -948,25 +963,25 @@ function renderTripleDonut(container, key, name, factibles, installed, withServi
     data: {
       labels: ['Factibles','No factibles','Instalados','No instalados','Con servicio','Sin servicio'],
       datasets: [
-        { // Anillo EXTERIOR = factibilidad
+        { // Anillo EXTERIOR = FACTIBILIDAD (amarillo)
           data: [factibles, Math.max(0, total - factibles)],
-          backgroundColor: [colOut, '#1e2335'],
-          borderWidth: 2, borderColor: '#181c27',
+          backgroundColor: [RING.fact, RING.bg],
+          borderWidth: 3, borderColor: '#181c27',
         },
-        { // Anillo MEDIO = instalada
+        { // Anillo MEDIO = INSTALADA (celeste)
           data: [installed, Math.max(0, total - installed)],
-          backgroundColor: [colMid, '#1e2335'],
-          borderWidth: 2, borderColor: '#181c27',
+          backgroundColor: [RING.inst, RING.bg],
+          borderWidth: 3, borderColor: '#181c27',
         },
-        { // Anillo INTERIOR = con servicio
+        { // Anillo INTERIOR = CON SERVICIO (verde)
           data: [withService, Math.max(0, total - withService)],
-          backgroundColor: [colIn, '#1e2335'],
-          borderWidth: 2, borderColor: '#181c27',
+          backgroundColor: [RING.serv, RING.bg],
+          borderWidth: 3, borderColor: '#181c27',
         },
       ]
     },
     options: {
-      responsive: false, cutout: '48%',
+      responsive: false, cutout: '46%',
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: {
