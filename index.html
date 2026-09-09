@@ -443,6 +443,11 @@
       <div class="metric-value"><span class="m-done" id="mGabDone">—</span><span class="m-sep">/</span><span class="m-total" id="mGab">—</span></div>
       <div class="metric-sub" id="mGabInst">Instalados</div>
     </div>
+    <div class="metric-card teal">
+      <div class="metric-label">Conectividad</div>
+      <div class="metric-value"><span class="m-done" id="mConDone">—</span><span class="m-sep">/</span><span class="m-total" id="mCon">—</span></div>
+      <div class="metric-sub" id="mConPct">Puntos con conectividad</div>
+    </div>
     <div class="metric-card green">
       <div class="metric-label">Cámaras fijas</div>
       <div class="metric-value"><span class="m-done" id="mFijasDone">—</span><span class="m-sep">/</span><span class="m-total" id="mFijas">—</span></div>
@@ -1133,6 +1138,7 @@ function buildCharts(d) {
   };
   setCard('mColDone',   'mCol',   d.colInstaladas || 0, d.col   || 0, 'mColPct',   'Postes');
   setCard('mGabDone',   'mGab',   d.instalados    || 0, d.gab   || 0, 'mGabInst',  'Gabinetes');
+  setCard('mConDone',    'mCon',   d.conectividadCount || 0, d.totalPuntos || 0, 'mConPct', 'Puntos con conectividad');
   setCard('mFijasDone', 'mFijas', d.fijasInst     || 0, d.fijas || 0, 'mFijasPct', 'Fijas');
   setCard('mLPRDone',   'mLPR',   d.lprInst       || 0, d.lpr   || 0, 'mLPRPct',   'LPR');
   setCard('mDomosDone', 'mDomos', d.domosInst     || 0, d.domos || 0);
