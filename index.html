@@ -228,9 +228,9 @@
   .map-filter-btn:hover { background: var(--surface2); color: var(--text); }
   .map-filter-btn.active { color: #0f1117; font-weight: 600; border-color: transparent; }
   .map-filter-btn.all.active    { background: #8b90a7; }
-  .map-filter-btn.ok.active     { background: #3ecf8e; }
+  .map-filter-btn.work.active   { background: #3ecf8e; }
+  .map-filter-btn.ok.active     { background: #22d3ee; }
   .map-filter-btn.nocon.active  { background: #8b90a7; }
-  .map-filter-btn.norel.active  { background: #f5a623; }
   .leaflet-popup-content-wrapper {
     background: #181c27 !important;
     border: 1px solid rgba(255,255,255,0.12) !important;
@@ -496,16 +496,16 @@
   <div id="mapSection">
     <div class="section-label">Mapa interactivo de cámaras</div>
     <div class="map-filters">
-      <button class="map-filter-btn all active" onclick="filterMap('all',this)">Todas (126)</button>
+      <button class="map-filter-btn all active" onclick="filterMap('all',this)">Todas</button>
+      <button class="map-filter-btn work" onclick="filterMap('work',this)">Cámara funcionando</button>
       <button class="map-filter-btn ok"   onclick="filterMap('ok',this)">Con conectividad</button>
       <button class="map-filter-btn nocon" onclick="filterMap('nocon',this)">Sin conectividad</button>
-      <button class="map-filter-btn norel" onclick="filterMap('norel',this)">Sin relevar</button>
     </div>
     <div id="mapContainer"></div>
     <div class="map-legend">
-      <div class="map-legend-item"><div class="map-legend-dot" style="background:#3ecf8e"></div>Con conectividad</div>
-      <div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7"></div>Sin conectividad</div><div class="map-legend-item"><div class="map-legend-dot" style="background:#ff6b6b"></div>Con problema activo</div>
-      <div class="map-legend-item"><div class="map-legend-dot" style="background:#f5a623"></div>Sin relevar</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#3ecf8e"></div>Cámara funcionando</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#22d3ee"></div>Con conectividad</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7"></div>Sin conectividad</div>
       <span style="flex-basis:100%;height:0"></span>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7;border-radius:2px;transform:rotate(45deg)"></div>Basural / Microbasural / Crónico / Coincidente</div>
       <div class="map-legend-item"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;border:2px solid #8b90a7;position:relative"><span style="position:absolute;left:1px;top:3px;width:7px;height:3px;background:#8b90a7;border-radius:1px"></span></span>LPR (lector de patentes) — forma cuadrada</div>
@@ -1245,10 +1245,10 @@ let mapInstance = null;
 let allMarkers = [];
 
 function getMarkerColor(cam) {
-  if (cam.relevado !== 1) return '#f5a623';
-  if (cam.probConect === 1) return '#ff6b6b';
-  if (cam.conectividad === 1) return '#3ecf8e';
-  return '#8b90a7';
+  // 3 estados: cámara instalada y funcionando (verde) > con conectividad (celeste) > sin conectividad (gris)
+  if (cam.estadoCam === 1)     return '#3ecf8e'; // verde  = cámara instalada y funcionando
+  if (cam.conectividad === 1)  return '#22d3ee'; // celeste = con conectividad (todavía sin cámara)
+  return '#8b90a7';                              // gris    = sin conectividad
 }
 
 function makeSVGIcon(color) {
@@ -1303,9 +1303,9 @@ function buildPopup(cam) {
   const conBadge = cam.conectividad === 1
     ? '<span class="popup-badge badge-ok">✓ Activa</span>'
     : '<span class="popup-badge badge-warn">✗ Sin conectividad</span>';
-  const relBadge = cam.relevado === 1
-    ? '<span class="popup-badge badge-ok">✓ Relevado</span>'
-    : '<span class="popup-badge badge-amber">⚠ Sin relevar</span>';
+  const camBadge = cam.estadoCam === 1
+    ? '<span class="popup-badge badge-ok">✓ Funcionando</span>'
+    : '<span class="popup-badge badge-warn">✗ No instalada</span>';
   const gabBadge = cam.instGabinete === 1
     ? '<span class="popup-badge badge-ok">✓ Instalado</span>'
     : '<span class="popup-badge badge-warn">✗ Pendiente</span>';
@@ -1319,8 +1319,8 @@ function buildPopup(cam) {
     <div class="popup-row"><span class="label">Localidad</span><span class="value">${cam.localidad}</span></div>
     <div class="popup-row"><span class="label">Cámaras</span><span class="value">${cam.totalCamaras} (${cam.fijas} fijas / ${cam.lpr} LPR)</span></div>
     <div class="popup-row"><span class="label">MB</span><span class="value">${cam.mb || '—'}</span></div>
-    <div class="popup-row"><span class="label">Relevamiento</span><span class="value">${relBadge}</span></div>
-    <div class="popup-row"><span class="label">Gabinete</span><span class="value">${gabBadge}</span></div>`;
+    <div class="popup-row"><span class="label">Gabinete</span><span class="value">${gabBadge}</span></div>
+    <div class="popup-row"><span class="label">Cámara</span><span class="value">${camBadge}</span></div>`;
 
   if (fechaGab !== '—') rows += `<div class="popup-row"><span class="label">Fecha gabinete</span><span class="value">${fechaGab}</span></div>`;
   if (fechaCol !== '—') rows += `<div class="popup-row"><span class="label">Fecha columna</span><span class="value">${fechaCol}</span></div>`;
@@ -1368,14 +1368,14 @@ function initMap(cameras) {
   });
 
   // Update filter button counts
-  const total = cameras.length;
-  const okCount = cameras.filter(c => c.conectividad === 1).length;
-  const noConCount = cameras.filter(c => c.relevado === 1 && c.conectividad !== 1).length;
-  const noRelCount = cameras.filter(c => !c.relevado).length;
-  document.querySelector('.map-filter-btn.all').textContent = `Todas (${total})`;
-  document.querySelector('.map-filter-btn.ok').textContent = `Con conectividad (${okCount})`;
+  const total       = cameras.length;
+  const workCount   = cameras.filter(c => c.estadoCam === 1).length;
+  const okCount     = cameras.filter(c => c.conectividad === 1 && c.estadoCam !== 1).length;
+  const noConCount  = cameras.filter(c => c.conectividad !== 1).length;
+  document.querySelector('.map-filter-btn.all').textContent   = `Todas (${total})`;
+  document.querySelector('.map-filter-btn.work').textContent  = `Cámara funcionando (${workCount})`;
+  document.querySelector('.map-filter-btn.ok').textContent    = `Con conectividad (${okCount})`;
   document.querySelector('.map-filter-btn.nocon').textContent = `Sin conectividad (${noConCount})`;
-  document.querySelector('.map-filter-btn.norel').textContent = `Sin relevar (${noRelCount})`;
 }
 
 function filterMap(type, btn) {
@@ -1385,9 +1385,9 @@ function filterMap(type, btn) {
     const cam = m.camData;
     let show = false;
     if (type === 'all')   show = true;
-    if (type === 'ok')    show = cam.conectividad === 1;
-    if (type === 'nocon') show = cam.relevado === 1 && cam.conectividad !== 1;
-    if (type === 'norel') show = !cam.relevado;
+    if (type === 'work')  show = cam.estadoCam === 1;
+    if (type === 'ok')    show = cam.conectividad === 1 && cam.estadoCam !== 1;
+    if (type === 'nocon') show = cam.conectividad !== 1;
     if (show) m.addTo(mapInstance);
     else mapInstance.removeLayer(m);
   });
@@ -1447,6 +1447,7 @@ function updateMapFromRows(dataRows, keys) {
       lpr: safeInt(r[keys.lpr]),
       isp: safe(r[keys.isp]||''),
       conectividad: safeInt(r[keys.conectividad]),
+      estadoCam: safeInt(r[keys.estadoCam]),
       relevado: safeInt(r[keys.relevado]),
       instGabinete: safeInt(r[keys.instGab]),
       fechaGabinete: safe(r[keys.fechaGab]||''),
