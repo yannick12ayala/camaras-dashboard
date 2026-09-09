@@ -1321,7 +1321,9 @@ async function bootstrap() {
       conect: findCol('Estado de Conectividad','Conectividadad','Conectividad'),
       isp:    findCol('ISP'),
       pdf:    findCol('PDF URL','PDF_URL'),
-      mb:     findCol('Cantidad de MB','Cantidad MB','Megas','MB'),
+      // "MB" a mano: exact-match primero (para no pisar con "NoMBre") y luego fallback
+      mb:     (cols.find(c => c.trim().toLowerCase() === 'mb') ||
+               findCol('Cantidad de MB','Cantidad MB','Megas')),
     };
     const asNum = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
     const asStr = v => (v === null || v === undefined) ? '' : String(v).replace(/\.0$/,'').trim();
