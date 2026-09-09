@@ -453,7 +453,7 @@
       <div class="metric-sub">Instalados</div>
     </div>
     <div class="metric-card blue">
-      <div class="metric-label">Total cámaras</div>
+      <div class="metric-label">Total dispositivos</div>
       <div class="metric-value"><span class="m-done" id="mTotalDone">—</span><span class="m-sep">/</span><span class="m-total" id="mTotal">—</span></div>
       <div class="metric-sub">Proyecto V completo</div>
     </div>
@@ -478,7 +478,7 @@
   <!-- AVANCE DE INSTALACIÓN (cámaras / postes / gabinetes) -->
   <div class="section-label">Avance de instalación</div>
   <div class="chart-card">
-    <div class="chart-title">Cámaras, postes y gabinetes instalados</div>
+    <div class="chart-title">Postes, gabinetes, conectividad y dispositivos instalados</div>
     <div class="chart-subtitle">Progreso general del proyecto por etapa</div>
     <div id="avanceInstGrid" class="donuts-grid"></div>
   </div>
@@ -814,6 +814,9 @@ function processRows(rows) {
     ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCam]) ? n(r[k.total]) : 0), 0) : 0;
   const colInstaladas = (k.estadoCol && k.col)
     ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCol]) ? n(r[k.col]) : 0), 0) : 0;
+  // Conectividad instalada = puntos con "Estado de Conectividadad" = 1
+  const conectividadCount = k.conectividad
+    ? dataRows.filter(r => n(r[k.conectividad]) === 1).length : 0;
   // Instalados por tipo de cámara (usa "Estado Instalación Cámara" = 1)
   const sumIfInst = colKey => (k.estadoCam && colKey)
     ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCam]) ? n(r[colKey]) : 0), 0) : 0;
@@ -827,7 +830,7 @@ function processRows(rows) {
     total: sum(k.total), fijas: sum(k.fijas), lpr: sum(k.lpr), domos: sum(k.domos),
     domosLargo: sum(k.domosLargo), domosMulti: sum(k.domosMulti), domosDoble: sum(k.domosDoble),
     gab: sum(k.gab), col: sum(k.col), instalados: instGabCount,
-    colInstaladas, camInstaladas,
+    colInstaladas, camInstaladas, conectividadCount,
     fijasInst, lprInst, domosInst, domosMultiInst, domosDobleInst,
     poe: sum(k.poe), grua: sum(k.grua), brazo100: sum(k.b100), brazo60: sum(k.b60), jaula: sum(k.jaula),
     localidades: locs,
@@ -998,10 +1001,12 @@ function buildAvanceInstalacion(d) {
   if (!cont) return;
   cont.innerHTML = '';
   Object.keys(charts).filter(k => k.startsWith('donut_inst_')).forEach(k => { charts[k].destroy(); delete charts[k]; });
+  // Orden cronológico: primero el poste, después el gabinete, la conectividad y por último el dispositivo (cámara)
   const rows = [
-    { key: 'cam',  name: 'Cámaras',   done: d.camInstaladas || 0, total: d.total || 0, color: '#3ecf8e' },
-    { key: 'col',  name: 'Postes',    done: d.colInstaladas || 0, total: d.col   || 0, color: '#22d3ee' },
-    { key: 'gab',  name: 'Gabinetes', done: d.instalados    || 0, total: d.gab   || 0, color: '#4d8ef0' },
+    { key: 'col',   name: 'Postes',        done: d.colInstaladas    || 0, total: d.col   || 0, color: '#22d3ee' },
+    { key: 'gab',   name: 'Gabinetes',     done: d.instalados       || 0, total: d.gab   || 0, color: '#4d8ef0' },
+    { key: 'con',   name: 'Conectividad',  done: d.conectividadCount|| 0, total: d.totalPuntos || 0, color: '#22d3ee' },
+    { key: 'dispo', name: 'Dispositivos',  done: d.camInstaladas    || 0, total: d.total || 0, color: '#3ecf8e' },
   ];
   rows.forEach(r => renderDonut(cont, 'inst_' + r.key, r.name, r.done, r.total, r.color));
 }
@@ -1192,9 +1197,10 @@ function buildCharts(d) {
   const instBox = document.getElementById('instProgress');
   if (instBox) {
     const rows = [
-      { label: 'Gabinetes', done: d.instalados,    total: d.gab, color: C.blue  },
-      { label: 'Columnas',  done: d.colInstaladas, total: d.col, color: C.teal  },
-      { label: 'Cámaras',   done: d.camInstaladas, total: d.total, color: C.green },
+      { label: 'Postes',        done: d.colInstaladas    || 0, total: d.col   || 0, color: C.teal  },
+      { label: 'Gabinetes',     done: d.instalados       || 0, total: d.gab   || 0, color: C.blue  },
+      { label: 'Conectividad',  done: d.conectividadCount|| 0, total: d.totalPuntos || 0, color: C.teal  },
+      { label: 'Dispositivos',  done: d.camInstaladas    || 0, total: d.total || 0, color: C.green },
     ];
     instBox.innerHTML = rows.map(r => {
       const pct = r.total > 0 ? Math.round(r.done / r.total * 100) : 0;
