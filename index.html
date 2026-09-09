@@ -135,9 +135,10 @@
   @media (max-width: 900px) { .isp-grid-4 { grid-template-columns: 1fr; } }
   /* Cada ISP en Avance de conectividad: barras a la izquierda + donut de QA a la derecha */
   .avance-isp-cell { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: stretch; }
-  .avance-isp-cell .avance-isp-left { min-width: 0; }
-  .avance-isp-cell .avance-isp-right { display: flex; align-items: center; }
-  .avance-isp-cell .donut-card { min-width: 170px; }
+  .avance-isp-cell .avance-isp-left { min-width: 0; display: flex; }
+  .avance-isp-cell .avance-isp-left > .bar-card { flex: 1; }
+  .avance-isp-cell .avance-isp-right { display: flex; }
+  .avance-isp-cell .avance-isp-right > .donut-card { min-width: 190px; flex: 1; justify-content: center; }
   @media (max-width: 560px)  { .avance-isp-cell { grid-template-columns: 1fr; } }
 
   /* Barras horizontales para avance ISP */
