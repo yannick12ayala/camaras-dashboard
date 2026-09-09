@@ -512,23 +512,6 @@
     </div>
   </div>
 
-  <!-- ISP -->
-  <div class="section-label">Conectividad por ISP</div>
-  <div class="isp-grid" id="ispGrid"></div>
-  <div class="charts-grid">
-    <div class="chart-card span2">
-      <div class="chart-title">Progreso de conectividad por ISP</div>
-      <div class="chart-subtitle">Cámaras con conectividad activa vs pendientes por proveedor</div>
-      <div class="legend">
-        <div class="legend-item"><div class="leg-dot" style="background:#3ecf8e"></div>Conectadas</div>
-        <div class="legend-item"><div class="leg-dot" style="background:#2a2f45"></div>Pendientes</div>
-      </div>
-      <div class="chart-wrap" style="height:260px">
-        <canvas id="chartISP" role="img" aria-label="Conectividad ISP">Conectividad ISP.</canvas>
-      </div>
-    </div>
-  </div>
-
   <!-- CAMARAS -->
   <div class="section-label">Problemas de conectividad</div>
   <div class="chart-card" style="padding:18px 20px;">
@@ -1074,6 +1057,7 @@ function buildRelevLoc(d) {
 
 function buildISPCards(ispData) {
   const grid = document.getElementById('ispGrid');
+  if (!grid) return; // sección eliminada del DOM
   const ispNames = Object.keys(ispData);
   if (!ispNames.length) { grid.innerHTML = '<p style="color:var(--text2);font-size:13px">Sin datos de ISP aún.</p>'; return; }
   grid.innerHTML = ispNames.map((isp, i) => {
@@ -1141,8 +1125,9 @@ function buildCharts(d) {
 
   // ISP chart
   const ispNames = Object.keys(d.isp);
-  if (ispNames.length) {
-    charts.isp = new Chart(document.getElementById('chartISP'), {
+  const chartISPEl = document.getElementById('chartISP');
+  if (ispNames.length && chartISPEl) {
+    charts.isp = new Chart(chartISPEl, {
       type: 'bar',
       data: {
         labels: ispNames,
