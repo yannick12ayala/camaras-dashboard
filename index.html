@@ -509,7 +509,8 @@
     <div class="chart-subtitle">
       <span style="color:#f5a623;font-weight:600">■ Factible</span> (poste + gabinete listos) &nbsp;·&nbsp;
       <span style="color:#22d3ee;font-weight:600">■ Instalado</span> (conectividad tendida) &nbsp;·&nbsp;
-      <span style="color:#3ecf8e;font-weight:600">■ Con servicio</span> (funcionando)
+      <span style="color:#3ecf8e;font-weight:600">■ Con servicio</span> (funcionando) &nbsp;·&nbsp;
+      <span style="color:#a78bfa;font-weight:600">■ QA aprobado</span> (calidad del servicio validada)
     </div>
     <div id="avanceIspGrid" class="isp-grid-4"></div>
   </div>
@@ -812,7 +813,7 @@ function processRows(rows) {
   dataRows.forEach(r => {
     const isp = k.isp && r[k.isp] ? String(r[k.isp]).trim().toUpperCase() : null;
     if (!isp || isp === '0' || isp === '') return;
-    if (!ispData[isp]) ispData[isp] = { total: 0, factibles: 0, conectadas: 0, conServicio: 0 };
+    if (!ispData[isp]) ispData[isp] = { total: 0, factibles: 0, conectadas: 0, conServicio: 0, qaAprobados: 0 };
     ispData[isp].total += 1;
     // Factible = poste (columna) + gabinete instalados. Es el "techo" hoy
     // para que el ISP pueda instalar conectividad.
@@ -824,6 +825,10 @@ function processRows(rows) {
     const idStr = String(r[Object.keys(r)[0]]||'').replace('.0','');
     if (SSisp[idStr] && SSisp[idStr].estadoConect && SSisp[idStr].estadoConect.value === 'con') {
       ispData[isp].conServicio += 1;
+    }
+    // QA aprobado (validado por control de avance, valida cómo dejó el servicio el ISP)
+    if (SSisp[idStr] && SSisp[idStr].qaAprobado && SSisp[idStr].qaAprobado.value === 'si') {
+      ispData[isp].qaAprobados += 1;
     }
   });
 
@@ -971,14 +976,16 @@ const RING = {
   fact: '#f5a623',  // amarillo (factibilidad)
   inst: '#22d3ee',  // celeste  (instalados)
   serv: '#3ecf8e',  // verde    (con servicio)
+  qa:   '#a78bfa',  // violeta  (QA aprobado)
   bg:   '#232838',
 };
 
-// Gráfico de barras horizontales por ISP: 3 barras (fact/inst/serv) sobre el total.
-function renderBarChart(container, key, name, factibles, installed, withService, total) {
+// Gráfico de barras horizontales por ISP: 4 barras (fact/inst/serv/qa) sobre el total.
+function renderBarChart(container, key, name, factibles, installed, withService, qaAprobados, total) {
   const pctFact = total > 0 ? Math.round(factibles   / total * 100) : 0;
   const pctInst = total > 0 ? Math.round(installed   / total * 100) : 0;
   const pctSrv  = total > 0 ? Math.round(withService / total * 100) : 0;
+  const pctQA   = total > 0 ? Math.round(qaAprobados / total * 100) : 0;
 
   const bar = (val, pct, color, label) =>
     '<div class="bar-row">' +
@@ -1004,6 +1011,7 @@ function renderBarChart(container, key, name, factibles, installed, withService,
       bar(factibles,   pctFact, RING.fact, 'Factible') +
       bar(installed,   pctInst, RING.inst, 'Instalado') +
       bar(withService, pctSrv,  RING.serv, 'Con servicio') +
+      bar(qaAprobados, pctQA,   RING.qa,   'QA aprobado') +
     '</div>';
   container.appendChild(card);
 }
@@ -1025,8 +1033,9 @@ function buildAvanceISP(d) {
     const factibles   = stats.factibles   || 0; // poste + gabinete instalados
     const installed   = stats.conectadas  || 0; // conectividad instalada (Excel: Estado de Conectividadad = 1)
     const withService = stats.conServicio || 0; // con servicio activo (portal ISP: estadoConect = 'con')
+    const qaAprobados = stats.qaAprobados || 0; // QA valida cómo dejó el servicio el ISP
     const color = (typeof ISP_COLORS !== 'undefined' && ISP_COLORS[name]) || '#4d8ef0';
-    renderBarChart(cont, 'isp_' + name.replace(/\W/g, '_'), name, factibles, installed, withService, total);
+    renderBarChart(cont, 'isp_' + name.replace(/\W/g, '_'), name, factibles, installed, withService, qaAprobados, total);
   });
 }
 
