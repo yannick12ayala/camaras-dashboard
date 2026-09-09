@@ -182,6 +182,9 @@ td.coord{font-family:'JetBrains Mono',monospace; font-size:11.5px; white-space:n
 /* SIN SERVICIO (rojo intenso, para el botón Energizado cuando el gabinete está vandalizado) */
 .status.sin-servicio{color:var(--bad); background:var(--bad-soft); border-color:color-mix(in oklab, var(--bad) 40%, transparent); font-size:10.5px; font-weight:700; letter-spacing:.04em}
 .status.sin-servicio .dot{background:var(--bad); box-shadow:0 0 0 3px color-mix(in oklab, var(--bad) 30%, transparent), 0 0 8px color-mix(in oklab, var(--bad) 60%, transparent)}
+/* QA sin evaluar: gris/pendiente */
+.status.pending{color:var(--muted); background:rgba(139,144,167,0.10); border-color:rgba(139,144,167,0.35)}
+.status.pending .dot{background:var(--muted); box-shadow:0 0 0 3px rgba(139,144,167,0.22), 0 0 8px rgba(139,144,167,0.5)}
 .status.edited::after{
   content:''; width:5px; height:5px; border-radius:50%; background:var(--accent); margin-left:2px;
 }
@@ -372,6 +375,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo{padding:6px 8px}
           <th data-k="isp">ISP</th>
           <th class="status-col" data-k="conect">Conectividad ISP</th>
           <th data-k="numServicio">N° de servicio</th>
+          <th class="status-col" data-k="qaEstado">QA</th>
           <th class="status-col" data-k="estadoConect">Instalación de cámara</th>
           <th data-k="idDispositivo">ID Dispositivo</th>
           <th class="no-sort">Foto</th>
@@ -695,6 +699,33 @@ function stEstadoCell(id) {
          '</div></td>';
 }
 
+// QA (validación posterior a la instalación) — misma UI y menú que Instalación de cámara.
+function getQaEstado(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].qaEstado;
+  return s && s.value ? s.value : ''; // por defecto: sin evaluar
+}
+function getQaMotivo(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].qaMotivo;
+  return s && s.value ? s.value : '';
+}
+function stQaCell(id) {
+  const val = getQaEstado(id); // '' | 'con' | 'sin'
+  const isOn = val === 'con';
+  const isOff = val === 'sin';
+  const cls = isOn ? 'si' : (isOff ? 'no' : 'pending');
+  const motivo = isOff ? getQaMotivo(id) : '';
+  const motivoTxt = motivo && MOTIVOS_MAP[motivo] ? MOTIVOS_MAP[motivo] : '';
+  const label = isOn ? 'QA OK' : (isOff ? 'QA RECHAZADO' : 'SIN QA');
+  const motivoHtml = motivoTxt ? '<span class="estado-motivo">' + motivoTxt + '</span>' : '';
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].qaEstado;
+  const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+                : 'Clic para evaluar QA';
+  return '<td class="status-col"><div class="estado-wrap">' +
+         '<button class="status estado-qa ' + cls +
+         '" data-qa-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + motivoHtml + '</button>' +
+         '</div></td>';
+}
+
 function render(){
   const term = $('q').value.trim().toLowerCase();
   const flL = $('fLoc').value, flB = $('fBarrio').value, flT = $('fTipo').value, flE = $('fEstado').value;
@@ -784,6 +815,7 @@ function render(){
       <td class="isp">${r.isp || '—'}</td>
       ${stConectCell(r.id)}
       ${numServicioCell(r.id)}
+      ${stQaCell(r.id)}
       ${stEstadoCell(r.id)}
       ${idDispositivoCell(r.id)}
       ${fotoCell(r.id)}
@@ -850,6 +882,8 @@ async function toggleHistoryRow(idTd) {
       numServicio:      'N° servicio',
       cantidadMB:       'Cantidad de MB',
       idDispositivo:    'ID Dispositivo',
+      qaEstado:         'QA',
+      qaMotivo:         'QA Motivo',
     };
     const rows = entries.map(e => {
       const when = new Date(e.ts).toLocaleString('es-AR');
@@ -984,6 +1018,52 @@ async function saveCantidadMB(input) {
 
 // Guarda estado + motivo (2 POSTs: primero motivo, después estado para que el
 // email tome el motivo actualizado). Repinta la celda in-place.
+// Igual que setEstadoSinMotivo pero para QA (qaEstado + qaMotivo)
+async function setQaSinMotivo(id, nextEstado, motivo) {
+  const row = DATA.find(r => r.id === id);
+  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
+  try {
+    const mResp = await fetch('/api/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'qaMotivo', value: motivo || '', cam }),
+    });
+    const mData = mResp.ok ? await mResp.json().catch(() => ({})) : {};
+    const resp = await fetch('/api/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'qaEstado', value: nextEstado, cam }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const eData = await resp.json().catch(() => ({}));
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].qaEstado = { value: nextEstado, by: '(vos)', at: new Date().toISOString() };
+    window.SERVER_STATUS[id].qaMotivo = { value: motivo || '', by: '(vos)', at: new Date().toISOString() };
+    const autoGab    = eData.autoGab    || mData.autoGab;
+    const autoEstado = eData.autoEstado || mData.autoEstado;
+    const autoMC    = eData.autoMotivoConect || mData.autoMotivoConect;
+    if (autoGab) {
+      window.SERVER_STATUS[id].gabineteEnergizado = { value: autoGab.next, by: 'auto (' + (autoGab.reason || '') + ')', at: new Date().toISOString() };
+      const btnE = document.querySelector('[data-energizado-id="' + CSS.escape(id) + '"]');
+      if (btnE) { const t = btnE.closest('td'); if (t) t.outerHTML = stEnergizadoCell(id); }
+    }
+    if (autoEstado) {
+      window.SERVER_STATUS[id].gabineteEstado = { value: autoEstado.next, by: 'auto (' + (autoEstado.reason || '') + ')', at: new Date().toISOString() };
+      const btnG = document.querySelector('[data-gabinete-id="' + CSS.escape(id) + '"]');
+      if (btnG) { const t = btnG.closest('td'); if (t) t.outerHTML = stGabineteCell(id); }
+    }
+    if (autoMC) {
+      window.SERVER_STATUS[id].motivoConect = { value: autoMC.next, by: 'auto (' + (autoMC.reason || '') + ')', at: new Date().toISOString() };
+      const btnC = document.querySelector('[data-conect-id="' + CSS.escape(id) + '"]');
+      if (btnC) { const t = btnC.closest('td'); if (t) t.outerHTML = stConectCell(id); }
+    }
+    const btn = document.querySelector('[data-qa-id="' + CSS.escape(id) + '"]');
+    if (btn) { const td = btn.closest('td'); if (td) td.outerHTML = stQaCell(id); }
+  } catch (err) {
+    alert('No se pudo guardar el QA: ' + err.message);
+  }
+}
+
 async function setEstadoSinMotivo(id, nextEstado, motivo) {
   const row = DATA.find(r => r.id === id);
   const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
@@ -1253,19 +1333,26 @@ document.addEventListener('click', async (e) => {
   const motivoBtn = e.target.closest && e.target.closest('.estado-menu [data-motivo]');
   if (motivoBtn) {
     const wrap = motivoBtn.closest('.estado-wrap');
+    // Detectamos si el menú es de Instalación o de QA por el data attribute del botón dueño
+    const qaBtnRef     = wrap && wrap.querySelector('[data-qa-id]');
     const estadoBtnRef = wrap && wrap.querySelector('[data-estado-id]');
-    if (!estadoBtnRef) return;
-    const id = estadoBtnRef.dataset.estadoId;
     const motivo = motivoBtn.dataset.motivo;
     document.querySelectorAll('.estado-menu').forEach(m => m.remove());
-    // 'en_servicio' pone estado en 'con' sin motivo. El resto en 'sin' con motivo.
+    if (qaBtnRef) {
+      const id = qaBtnRef.dataset.qaId;
+      if (motivo === 'en_servicio') await setQaSinMotivo(id, 'con', '');
+      else                          await setQaSinMotivo(id, 'sin', motivo);
+      return;
+    }
+    if (!estadoBtnRef) return;
+    const id = estadoBtnRef.dataset.estadoId;
     if (motivo === 'en_servicio') await setEstadoSinMotivo(id, 'con', '');
     else                          await setEstadoSinMotivo(id, 'sin', motivo);
     return;
   }
   // Click afuera del menú → cerrar (también antes del guard)
   if (document.querySelector('.estado-menu') &&
-      !e.target.closest('.estado-menu') && !e.target.closest('[data-estado-id]')) {
+      !e.target.closest('.estado-menu') && !e.target.closest('[data-estado-id]') && !e.target.closest('[data-qa-id]')) {
     document.querySelectorAll('.estado-menu').forEach(m => m.remove());
   }
 
@@ -1289,6 +1376,22 @@ document.addEventListener('click', async (e) => {
     menu.className = 'estado-menu';
     menu.innerHTML =
       '<div class="m-title">Instalación de cámara</div>' +
+      MOTIVOS.map(m => '<button data-motivo="' + m.key + '">' + m.label + '</button>').join('');
+    wrap.appendChild(menu);
+    return;
+  }
+
+  // ── Caso especial: QA — mismo menú, mismos efectos que Instalación de cámara ──
+  const qaId = btn.dataset.qaId;
+  if (qaId) {
+    const wrap = btn.closest('.estado-wrap');
+    const existing = wrap && wrap.querySelector('.estado-menu');
+    if (existing) { existing.remove(); return; }
+    document.querySelectorAll('.estado-menu').forEach(m => m.remove());
+    const menu = document.createElement('div');
+    menu.className = 'estado-menu';
+    menu.innerHTML =
+      '<div class="m-title">QA — Validación</div>' +
       MOTIVOS.map(m => '<button data-motivo="' + m.key + '">' + m.label + '</button>').join('');
     wrap.appendChild(menu);
     return;

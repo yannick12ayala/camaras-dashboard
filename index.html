@@ -888,7 +888,7 @@ function processRows(rows) {
       ispData[isp].conServicio += 1;
     }
     // QA aprobado (validado por control de avance, valida cómo dejó el servicio el ISP)
-    if (SSisp[idStr] && SSisp[idStr].qaAprobado && SSisp[idStr].qaAprobado.value === 'si') {
+    if (SSisp[idStr] && SSisp[idStr].qaEstado && SSisp[idStr].qaEstado.value === 'con') {
       ispData[isp].qaAprobados += 1;
     }
   });
@@ -910,13 +910,13 @@ function processRows(rows) {
   // Conectividad instalada = puntos con "Estado de Conectividadad" = 1
   const conectividadCount = k.conectividad
     ? dataRows.filter(r => n(r[k.conectividad]) === 1).length : 0;
-  // QA aprobados = puntos con SERVER_STATUS.qaAprobado === 'si'
-  // (Se completa desde el portal Control de avance; hoy default 0.)
+  // QA aprobados = puntos con SERVER_STATUS.qaEstado === 'con'
+  // (Se completa desde el portal Control de avance con las opciones de motivo QA.)
   const SSqa = window.SERVER_STATUS || {};
   const qaAprobados = dataRows.filter(r => {
     const id = String(r[Object.keys(r)[0]]||'').replace('.0','');
-    const st = SSqa[id] && SSqa[id].qaAprobado;
-    return st && st.value === 'si';
+    const st = SSqa[id] && SSqa[id].qaEstado;
+    return st && st.value === 'con';
   }).length;
   // Instalados por tipo de cámara (usa "Estado Instalación Cámara" = 1)
   const sumIfInst = colKey => (k.estadoCam && colKey)

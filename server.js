@@ -542,6 +542,10 @@ const server = http.createServer(async (req, res) => {
       // Estado del gabinete físico (compartido/persistente). 'vandalizado' se
       // usa cuando el motivo de "Sin servicio" es vandalismo.
       gabineteEstado: ['si', 'no', 'vandalizado', ''],
+      // QA: validación independiente del ISP. Mismas opciones que "Instalación
+      // de cámara"; dispara los mismos efectos automáticos sobre gabinete/energizado/motivoConect.
+      qaEstado: ['con', 'sin'],
+      qaMotivo: ['en_servicio', 'onu_alarmada', 'vandalizado', 'fibra_cortada', 'falla_enrutamiento', ''],
     };
     const freeText = { numServicio: 60, cantidadMB: 20, idDispositivo: 60 }; // { campo: maxLen }
     if (closed[field]) {
@@ -607,6 +611,14 @@ const server = http.createServer(async (req, res) => {
     if (field === 'motivoSinServicio' && (value === 'onu_alarmada' || value === 'fibra_cortada' || value === 'falla_enrutamiento')) {
       setAutoMotivoConect(value, MOTIVO_LABEL[value] || value);
     }
+    // D) QA: mismas reglas de cascada que motivoSinServicio (aplican en paralelo)
+    if (field === 'qaMotivo' && value === 'vandalizado') {
+      setAutoEstado('vandalizado', 'QA vandalizado');
+      setAutoGab('no', 'QA vandalizado');
+    }
+    if (field === 'qaMotivo' && (value === 'onu_alarmada' || value === 'fibra_cortada' || value === 'falla_enrutamiento')) {
+      setAutoMotivoConect(value, 'QA ' + (MOTIVO_LABEL[value] || value));
+    }
     // C) Reparado: estadoConect vuelve a 'con'
     if (field === 'estadoConect' && value === 'con' && prev === 'sin') {
       const gab = all[id].gabineteEnergizado;
@@ -621,6 +633,22 @@ const server = http.createServer(async (req, res) => {
       if (mc && (mc.value === 'onu_alarmada' || mc.value === 'fibra_cortada' || mc.value === 'falla_enrutamiento') &&
           typeof mc.by === 'string' && mc.by.startsWith('auto')) {
         setAutoMotivoConect('en_servicio', 'reparado');
+      }
+    }
+    // C') Reparado por QA: qaEstado vuelve a 'con' → mismas restauraciones que C
+    if (field === 'qaEstado' && value === 'con' && prev === 'sin') {
+      const gab = all[id].gabineteEnergizado;
+      if (gab && gab.value === 'no' && typeof gab.by === 'string' && gab.by.startsWith('auto')) {
+        setAutoGab('si', 'QA reparado');
+      }
+      const est = all[id].gabineteEstado;
+      if (est && est.value === 'vandalizado' && typeof est.by === 'string' && est.by.startsWith('auto')) {
+        setAutoEstado('si', 'QA reparado');
+      }
+      const mc = all[id].motivoConect;
+      if (mc && (mc.value === 'onu_alarmada' || mc.value === 'fibra_cortada' || mc.value === 'falla_enrutamiento') &&
+          typeof mc.by === 'string' && mc.by.startsWith('auto')) {
+        setAutoMotivoConect('en_servicio', 'QA reparado');
       }
     }
     saveStatuses(all);
