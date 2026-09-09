@@ -297,16 +297,17 @@ tr.history-row .h-time{font-family:'JetBrains Mono',monospace; color:var(--ink-2
 tr.history-row .h-by{color:var(--ink)}
 
 /* Columna N° de servicio (input editable) */
-td.num-servicio, td.cantidad-mb{padding:6px 8px}
-.num-servicio-input, .cantidad-mb-input{
+td.num-servicio, td.cantidad-mb, td.id-dispositivo{padding:6px 8px}
+.num-servicio-input, .cantidad-mb-input, .id-dispositivo-input{
   width:110px; padding:5px 8px; border:1px solid var(--line); border-radius:5px;
   background:var(--bg); color:var(--ink); font:inherit; font-size:12px;
   font-family:'JetBrains Mono',monospace; outline:none; transition:border-color .15s, background .3s;
 }
 .cantidad-mb-input{width:80px}
-.num-servicio-input:focus, .cantidad-mb-input:focus{border-color:var(--accent); background:var(--surf)}
-.num-servicio-input.saving, .cantidad-mb-input.saving{opacity:.55}
-.num-servicio-input.saved, .cantidad-mb-input.saved{border-color:var(--good); background:var(--good-soft)}
+.id-dispositivo-input{width:140px}
+.num-servicio-input:focus, .cantidad-mb-input:focus, .id-dispositivo-input:focus{border-color:var(--accent); background:var(--surf)}
+.num-servicio-input.saving, .cantidad-mb-input.saving, .id-dispositivo-input.saving{opacity:.55}
+.num-servicio-input.saved, .cantidad-mb-input.saved, .id-dispositivo-input.saved{border-color:var(--good); background:var(--good-soft)}
 </style>
 
 <div class="wrap">
@@ -372,6 +373,7 @@ td.num-servicio, td.cantidad-mb{padding:6px 8px}
           <th class="status-col" data-k="conect">Conectividad ISP</th>
           <th data-k="numServicio">N° de servicio</th>
           <th class="status-col" data-k="estadoConect">Instalación de cámara</th>
+          <th data-k="idDispositivo">ID Dispositivo</th>
           <th class="no-sort">Foto</th>
           <th class="no-sort">Plano</th>
         </tr></thead>
@@ -552,6 +554,20 @@ function cantidadMBCell(id) {
   const esc = (val || '').replace(/"/g, '&quot;');
   return '<td class="cantidad-mb"><input class="cantidad-mb-input" data-mb-id="' + id +
          '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="20"></td>';
+}
+// ID Dispositivo: input editable, persistente en el server
+function getIdDispositivo(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].idDispositivo;
+  return s && s.value != null ? String(s.value) : '';
+}
+function idDispositivoCell(id) {
+  const val = getIdDispositivo(id);
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].idDispositivo;
+  const tip = s ? ('Último cambio: ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+                : 'Ingresá el ID/nombre del dispositivo y hacé Tab o Enter';
+  const esc = (val || '').replace(/"/g, '&quot;');
+  return '<td class="id-dispositivo"><input class="id-dispositivo-input" data-idd-id="' + id +
+         '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="60"></td>';
 }
 // Motivos del menú de "Instalación de cámara".
 // 'en_servicio' → estado = con (verde). El resto → estado = sin con motivo.
@@ -769,6 +785,7 @@ function render(){
       ${stConectCell(r.id)}
       ${numServicioCell(r.id)}
       ${stEstadoCell(r.id)}
+      ${idDispositivoCell(r.id)}
       ${fotoCell(r.id)}
       <td>${pdf}</td>
     </tr>`;
@@ -832,6 +849,7 @@ async function toggleHistoryRow(idTd) {
       motivoSinServicio: 'Motivo',
       numServicio:      'N° servicio',
       cantidadMB:       'Cantidad de MB',
+      idDispositivo:    'ID Dispositivo',
     };
     const rows = entries.map(e => {
       const when = new Date(e.ts).toLocaleString('es-AR');
@@ -892,13 +910,46 @@ document.addEventListener('blur', (e) => {
   if (inp) saveNumServicio(inp);
   const inpMB = e.target.closest && e.target.closest('.cantidad-mb-input');
   if (inpMB) saveCantidadMB(inpMB);
+  const inpIdd = e.target.closest && e.target.closest('.id-dispositivo-input');
+  if (inpIdd) saveIdDispositivo(inpIdd);
 }, true);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
-    const inp = e.target.closest && e.target.closest('.num-servicio-input, .cantidad-mb-input');
+    const inp = e.target.closest && e.target.closest('.num-servicio-input, .cantidad-mb-input, .id-dispositivo-input');
     if (inp) { inp.blur(); }
   }
 });
+
+// ID Dispositivo: guardar al perder foco (blur) o al Enter
+async function saveIdDispositivo(input) {
+  const id = input.dataset.iddId;
+  if (!id) return;
+  const value = input.value.trim();
+  const prev = getIdDispositivo(id);
+  if (value === prev) return;
+  input.disabled = true;
+  input.classList.add('saving');
+  try {
+    const resp = await fetch('/api/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'idDispositivo', value }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].idDispositivo = { value, by: '(vos)', at: new Date().toISOString() };
+    input.classList.remove('saving');
+    input.classList.add('saved');
+    setTimeout(() => input.classList.remove('saved'), 1200);
+  } catch (err) {
+    alert('No se pudo guardar el ID Dispositivo: ' + err.message);
+    input.value = prev;
+  } finally {
+    input.disabled = false;
+  }
+}
 
 // Cantidad de MB: guardar al perder foco (blur) o al Enter
 async function saveCantidadMB(input) {
