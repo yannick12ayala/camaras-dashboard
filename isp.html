@@ -164,6 +164,12 @@ td.coord{font-family:'JetBrains Mono',monospace; font-size:11.5px; white-space:n
 .status.si .dot{background:var(--good); box-shadow:0 0 0 3px color-mix(in oklab, var(--good) 25%, transparent), 0 0 8px color-mix(in oklab, var(--good) 55%, transparent)}
 .status.no{color:var(--bad); background:var(--bad-soft); border-color:color-mix(in oklab, var(--bad) 30%, transparent)}
 .status.no .dot{background:var(--bad); box-shadow:0 0 0 3px color-mix(in oklab, var(--bad) 25%, transparent), 0 0 8px color-mix(in oklab, var(--bad) 55%, transparent)}
+.status.sin-energia{color:#c47a00; background:rgba(245,166,35,0.13); border-color:rgba(245,166,35,0.4); font-size:10.5px; font-weight:700; letter-spacing:.04em}
+.status.sin-energia .dot{background:#f5a623; box-shadow:0 0 0 3px rgba(245,166,35,0.25), 0 0 8px rgba(245,166,35,0.6)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .status.sin-energia{color:#f5a623; background:rgba(245,166,35,0.15)}
+}
+:root[data-theme="dark"] .status.sin-energia{color:#f5a623; background:rgba(245,166,35,0.15)}
 .status.edited::after{
   content:''; width:5px; height:5px; border-radius:50%; background:var(--accent); margin-left:2px;
 }
@@ -535,9 +541,15 @@ function getEnergizado(id) {
 function stEnergizadoCell(id) {
   const val = getEnergizado(id);
   const isOn = val === 'si';
-  const cls = isOn ? 'si' : 'no';
-  const label = isOn ? 'SÍ' : 'NO';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEnergizado;
+  // Caso especial: quedó SIN energía por la regla automática de "Conectividad
+  // SÍ con motivo Sin energía". Se muestra "SIN ENERGÍA" en vez de "NO" para
+  // que sea evidente por qué está apagado.
+  const motivoConect = getConectMotivo(id);
+  const conectSi = getConectSrv(id) === 'si';
+  const isSinEnergia = !isOn && conectSi && motivoConect === 'sin_energia';
+  const cls = isOn ? 'si' : (isSinEnergia ? 'sin-energia' : 'no');
+  const label = isOn ? 'SÍ' : (isSinEnergia ? 'SIN ENERGÍA' : 'NO');
   const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar';
   return '<td class="status-col"><button class="status energizado ' + cls +
          '" data-energizado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
