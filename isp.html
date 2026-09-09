@@ -553,10 +553,11 @@ function cantidadMBCell(id) {
 // Motivos del menú de "Instalación de cámara".
 // 'en_servicio' → estado = con (verde). El resto → estado = sin con motivo.
 const MOTIVOS = [
-  { key: 'en_servicio',   label: 'Instalada / En servicio' },
-  { key: 'onu_alarmada',  label: 'ONU alarmada' },
-  { key: 'vandalizado',   label: 'Vandalizado' },
-  { key: 'fibra_cortada', label: 'Fibra cortada' },
+  { key: 'en_servicio',       label: 'Instalada / En servicio' },
+  { key: 'onu_alarmada',      label: 'ONU alarmada' },
+  { key: 'vandalizado',       label: 'Vandalizado' },
+  { key: 'fibra_cortada',     label: 'Fibra cortada' },
+  { key: 'falla_enrutamiento', label: 'Falla de enrutamiento' },
 ];
 const MOTIVOS_MAP = MOTIVOS.reduce((m, x) => (m[x.key] = x.label, m), {});
 function getMotivo(id) {
@@ -624,8 +625,9 @@ const CONECT_MOTIVOS = [
 // "Instalación de cámara"): no se ofrecen como opciones al técnico pero sí
 // se muestran como label del botón cuando el server los pone.
 const CONECT_MOTIVOS_EXTRA = [
-  { key: 'onu_alarmada',  label: 'ONU alarmada' },
-  { key: 'fibra_cortada', label: 'Fibra cortada' },
+  { key: 'onu_alarmada',       label: 'ONU alarmada' },
+  { key: 'fibra_cortada',      label: 'Fibra cortada' },
+  { key: 'falla_enrutamiento', label: 'Falla de enrutamiento' },
 ];
 const CONECT_MOTIVOS_MAP = [...CONECT_MOTIVOS, ...CONECT_MOTIVOS_EXTRA]
   .reduce((m, x) => (m[x.key] = x.label, m), {});
@@ -636,7 +638,7 @@ function stConectCell(id) {
   const motivoTxt = motivo && CONECT_MOTIVOS_MAP[motivo] ? CONECT_MOTIVOS_MAP[motivo] : '';
   // Motivos que representan un problema activo — el botón se pone en rojo
   // aunque la conectividad esté instalada (conect='si').
-  const PROBLEMAS = ['onu_alarmada','fibra_cortada','sin_energia','vandalizado'];
+  const PROBLEMAS = ['onu_alarmada','fibra_cortada','sin_energia','vandalizado','falla_enrutamiento'];
   const esProblema = PROBLEMAS.indexOf(motivo) >= 0;
   const cls = isOn ? (esProblema ? 'no' : 'si') : 'no';
   const label = isOn ? 'SÍ' : 'NO';

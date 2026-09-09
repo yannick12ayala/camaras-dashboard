@@ -285,10 +285,11 @@ function getMailer() {
   }
 }
 const MOTIVO_LABEL = {
-  onu_alarmada:  'ONU alarmada',
-  fibra_cortada: 'Fibra cortada',
-  sin_energia:   'Sin energía',
-  vandalizado:   'Vandalizado',
+  onu_alarmada:       'ONU alarmada',
+  fibra_cortada:      'Fibra cortada',
+  sin_energia:        'Sin energía',
+  vandalizado:        'Vandalizado',
+  falla_enrutamiento: 'Falla de enrutamiento',
 };
 async function notifyEstadoChange({ id, prev, next, by, cam, motivo }) {
   const label = { con: 'Con servicio', sin: 'Sin servicio' };
@@ -529,13 +530,13 @@ const server = http.createServer(async (req, res) => {
     const closed = {
       estadoConect: ['con', 'sin'],
       // Motivo cuando estadoConect = 'sin'. '' = limpiar (cuando vuelve a 'con').
-      motivoSinServicio: ['onu_alarmada', 'fibra_cortada', 'sin_energia', 'vandalizado', ''],
+      motivoSinServicio: ['onu_alarmada', 'fibra_cortada', 'sin_energia', 'vandalizado', 'falla_enrutamiento', ''],
       // Conectividad instalada (antes era localStorage; ahora compartido en server)
       conect: ['si', 'no', ''],
       // Motivo asociado a la Conectividad ISP. Algunos valores solo aparecen
       // por regla auto (onu_alarmada, fibra_cortada — vienen de "Instalación
       // de cámara"): no se ofrecen como opción del técnico en Conectividad ISP.
-      motivoConect: ['en_servicio', 'sin_energia', 'vandalizado', 'onu_alarmada', 'fibra_cortada', ''],
+      motivoConect: ['en_servicio', 'sin_energia', 'vandalizado', 'onu_alarmada', 'fibra_cortada', 'falla_enrutamiento', ''],
       // Gabinete energizado (independiente del gabinete instalado)
       gabineteEnergizado: ['si', 'no', ''],
       // Estado del gabinete físico (compartido/persistente). 'vandalizado' se
@@ -601,10 +602,10 @@ const server = http.createServer(async (req, res) => {
       setAutoEstado('vandalizado', 'vandalizado');
       setAutoGab('no', 'vandalizado');
     }
-    // B'') "Instalación de cámara" con motivo ONU alarmada / Fibra cortada:
+    // B'') "Instalación de cámara" con motivo ONU alarmada / Fibra cortada / Falla de enrutamiento:
     // se refleja en la Conectividad ISP (motivoConect) sin cambiar gabinete/energizado.
-    if (field === 'motivoSinServicio' && (value === 'onu_alarmada' || value === 'fibra_cortada')) {
-      setAutoMotivoConect(value, value === 'onu_alarmada' ? 'ONU alarmada' : 'fibra cortada');
+    if (field === 'motivoSinServicio' && (value === 'onu_alarmada' || value === 'fibra_cortada' || value === 'falla_enrutamiento')) {
+      setAutoMotivoConect(value, MOTIVO_LABEL[value] || value);
     }
     // C) Reparado: estadoConect vuelve a 'con'
     if (field === 'estadoConect' && value === 'con' && prev === 'sin') {
@@ -617,7 +618,7 @@ const server = http.createServer(async (req, res) => {
         setAutoEstado('si', 'reparado');
       }
       const mc = all[id].motivoConect;
-      if (mc && (mc.value === 'onu_alarmada' || mc.value === 'fibra_cortada') &&
+      if (mc && (mc.value === 'onu_alarmada' || mc.value === 'fibra_cortada' || mc.value === 'falla_enrutamiento') &&
           typeof mc.by === 'string' && mc.by.startsWith('auto')) {
         setAutoMotivoConect('en_servicio', 'reparado');
       }
