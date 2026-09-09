@@ -572,31 +572,19 @@ function numServicioCell(id) {
   return '<td class="num-servicio"><input class="num-servicio-input" data-num-id="' + id +
          '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="60"></td>';
 }
-// Lote de instalación: select con los lotes existentes + opción para crear uno nuevo.
+// Lote de instalación: select con opciones fijas del 1 al 10.
+const LOTES = ['Lote 1','Lote 2','Lote 3','Lote 4','Lote 5','Lote 6','Lote 7','Lote 8','Lote 9','Lote 10'];
 function getLote(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].lote;
   return s && s.value != null ? String(s.value) : '';
-}
-// Recorre SERVER_STATUS para armar la lista única de lotes ya asignados (para el <select>).
-function lotesExistentes() {
-  const set = new Set();
-  const ss = window.SERVER_STATUS || {};
-  Object.keys(ss).forEach(k => {
-    const v = ss[k] && ss[k].lote && ss[k].lote.value;
-    if (v) set.add(String(v));
-  });
-  return Array.from(set).sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
 }
 function loteCell(id) {
   const val = getLote(id);
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].lote;
   const tip = s ? ('Asignado por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
-                : 'Elegí un lote existente o creá uno nuevo';
-  const lotes = lotesExistentes();
-  if (val && !lotes.includes(val)) lotes.push(val);
+                : 'Elegí a qué lote pertenece este punto';
   const opts = ['<option value="">—</option>']
-    .concat(lotes.map(l => '<option value="' + l.replace(/"/g,'&quot;') + '"' + (l === val ? ' selected' : '') + '>' + l + '</option>'))
-    .concat('<option value="__NEW__">+ Nuevo lote…</option>')
+    .concat(LOTES.map(l => '<option value="' + l + '"' + (l === val ? ' selected' : '') + '>' + l + '</option>'))
     .join('');
   return '<td class="lote-col">' +
          '<select class="lote-input" data-lote-id="' + id + '" title="' + tip + '">' + opts + '</select>' +
@@ -1076,20 +1064,14 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Lote: guardar al cambiar el <select>. Si el usuario elige "+ Nuevo lote…"
-// pedimos el nombre con prompt() y guardamos ese.
+// Lote: guardar al cambiar el <select>.
 document.addEventListener('change', async (e) => {
   const sel = e.target.closest && e.target.closest('.lote-input');
   if (!sel) return;
   const id = sel.dataset.loteId;
   if (!id) return;
-  let value = sel.value;
+  const value = sel.value;
   const prev = getLote(id);
-  if (value === '__NEW__') {
-    const nombre = prompt('Nombre del nuevo lote (ej. "Lote 3"):', 'Lote ');
-    if (!nombre || !nombre.trim()) { sel.value = prev; return; }
-    value = nombre.trim().slice(0, 20);
-  }
   if (value === prev) return;
   sel.disabled = true;
   try {
