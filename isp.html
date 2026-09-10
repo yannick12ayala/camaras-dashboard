@@ -851,22 +851,21 @@ function fotoCell(id) {
          '<span class="foto-count">' + n + '</span></button></td>';
 }
 
-// Observaciones: input libre, se guarda al perder foco. Cada guardado queda en
-// el historial con el usuario que lo agregó (mismo mecanismo que los demás campos).
+// Observaciones: input libre "append-only". Cada guardado queda como una entrada
+// nueva en el historial y el textarea se limpia para escribir la próxima.
+// No se pre-carga la última observación — el historial se ve haciendo clic en el ID.
 function getObservacion(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].observacion;
   return s && s.value != null ? String(s.value) : '';
 }
 function observacionCell(id) {
-  const val = getObservacion(id);
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].observacion;
   const tip = s
-    ? ('Última observación por ' + s.by + ' el ' + fmtDateTime(s.at) + ' — clic para editar o agregar')
-    : 'Agregá una observación (queda en el historial con tu usuario)';
-  const esc = (val || '').replace(/"/g, '&quot;').replace(/</g,'&lt;');
+    ? ('Última observación por ' + s.by + ' el ' + fmtDateTime(s.at) + ' — escribí y salí del campo para agregar otra')
+    : 'Escribí una observación y salí del campo (queda en el historial y el casillero se limpia)';
   return '<td class="observacion-col">' +
          '<textarea class="observacion-input" data-obs-id="' + id + '" maxlength="500" rows="2" ' +
-         'placeholder="—" title="' + tip + '">' + esc + '</textarea>' +
+         'placeholder="—" title="' + tip + '"></textarea>' +
          '</td>';
 }
 
@@ -1331,8 +1330,7 @@ async function saveObservacion(input) {
   const id = input.dataset.obsId;
   if (!id) return;
   const value = input.value.trim();
-  const prev = getObservacion(id);
-  if (value === prev) return;
+  if (!value) return; // vacío = nada que guardar
   input.disabled = true;
   input.classList.add('saving');
   try {
@@ -1345,12 +1343,13 @@ async function saveObservacion(input) {
     window.SERVER_STATUS = window.SERVER_STATUS || {};
     window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
     window.SERVER_STATUS[id].observacion = { value, by: '(vos)', at: new Date().toISOString() };
+    // Limpiar el textarea para permitir escribir otra observación sin borrar la anterior.
+    input.value = '';
     input.classList.remove('saving');
     input.classList.add('saved');
     setTimeout(() => input.classList.remove('saved'), 1200);
   } catch (err) {
     alert('No se pudo guardar la observación: ' + err.message);
-    input.value = prev;
   } finally {
     input.disabled = false;
   }
