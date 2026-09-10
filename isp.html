@@ -474,6 +474,14 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
 let DATA = [];
 
 const $ = (id) => document.getElementById(id);
+// Formato de fecha/hora unificado: "DD/MM/AAAA, HH:MMhs" en 24hs.
+function fmtDateTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear() +
+         ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + 'hs';
+}
 const fmt = (n) => new Intl.NumberFormat('es-AR').format(n);
 
 // DMS -> decimal
@@ -599,7 +607,7 @@ function stPostesCell(id) {
   const cls = val === 'si' ? 'si' : (val === 'no' ? 'no' : 'pending');
   const label = val === 'si' ? 'SÍ' : (val === 'no' ? 'NO' : 'PENDIENTE');
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
-  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+  const tip = s ? (label + ' — por ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Clic para evaluar el poste';
   return `<td class="status-col"><div class="estado-wrap"><button class="status ${cls}" data-postes-id="${id}" title="${tip}"><span class="dot"></span>${label}</button></div></td>`;
 }
@@ -636,7 +644,7 @@ function getNumServicio(id) {
 function numServicioCell(id) {
   const val = getNumServicio(id);
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].numServicio;
-  const tip = s ? ('Último cambio: ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+  const tip = s ? ('Último cambio: ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Ingresá el número de servicio y hacé Tab o Enter';
   const esc = (val || '').replace(/"/g, '&quot;');
   return '<td class="num-servicio"><input class="num-servicio-input" data-num-id="' + id +
@@ -654,7 +662,7 @@ function getIspAsignado(id) {
 function ispCell(id) {
   const val = getIspAsignado(id);
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].isp;
-  const tip = s ? ('Asignado por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+  const tip = s ? ('Asignado por ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Elegí a qué ISP pertenece este punto';
   const opts = ['<option value="">—</option>']
     .concat(ISPS.map(i => '<option value="' + i + '"' + (i === val ? ' selected' : '') + '>' + i + '</option>'))
@@ -673,7 +681,7 @@ function getLote(id) {
 function loteCell(id) {
   const val = getLote(id);
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].lote;
-  const tip = s ? ('Asignado por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+  const tip = s ? ('Asignado por ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Elegí a qué lote pertenece este punto';
   const opts = ['<option value="">—</option>']
     .concat(LOTES.map(l => '<option value="' + l + '"' + (l === val ? ' selected' : '') + '>' + l + '</option>'))
@@ -694,7 +702,7 @@ function getCantidadMB(id) {
 function cantidadMBCell(id) {
   const val = getCantidadMB(id);
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].cantidadMB;
-  const tip = s ? ('Último cambio: ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+  const tip = s ? ('Último cambio: ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Ingresá la cantidad de MB y hacé Tab o Enter';
   const esc = (val || '').replace(/"/g, '&quot;');
   return '<td class="cantidad-mb"><input class="cantidad-mb-input" data-mb-id="' + id +
@@ -708,7 +716,7 @@ function getIdDispositivo(id) {
 function idDispositivoCell(id) {
   const val = getIdDispositivo(id);
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].idDispositivo;
-  const tip = s ? ('Último cambio: ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+  const tip = s ? ('Último cambio: ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Ingresá el ID/nombre del dispositivo y hacé Tab o Enter';
   const esc = (val || '').replace(/"/g, '&quot;');
   return '<td class="id-dispositivo"><input class="id-dispositivo-input" data-idd-id="' + id +
@@ -754,7 +762,7 @@ function stGabineteCell(id) {
   // Gris "PENDIENTE" cuando el técnico aún no lo evaluó (val === '').
   const cls = isVand ? 'vandalizado' : (isOn ? 'si' : (isOff ? 'no' : 'pending'));
   const label = isVand ? 'VANDALIZADO' : (isOn ? 'SÍ' : (isOff ? 'NO' : 'PENDIENTE'));
-  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar (aún sin evaluar)';
+  const tip = s ? (label + ' — por ' + s.by + ' el ' + fmtDateTime(s.at)) : 'Clic para cambiar (aún sin evaluar)';
   return '<td class="status-col"><div class="estado-wrap"><button class="status gabinete-srv ' + cls +
          '" data-gabinete-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button>' +
          '</div></td>';
@@ -783,7 +791,7 @@ function stEnergizadoCell(id) {
   else if (isAutoOff){ cls = 'sin-energia'; label = 'SIN ENERGÍA'; }
   else if (isOff)   { cls = 'no';           label = 'NO'; }
   else              { cls = 'pending';      label = 'PENDIENTE'; }
-  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar (aún sin evaluar)';
+  const tip = s ? (label + ' — por ' + s.by + ' el ' + fmtDateTime(s.at)) : 'Clic para cambiar (aún sin evaluar)';
   return '<td class="status-col"><div class="estado-wrap"><button class="status energizado ' + cls +
          '" data-energizado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button>' +
          '</div></td>';
@@ -828,7 +836,7 @@ function stConectCell(id) {
   const label = isOn ? 'SÍ' : (isOff ? 'NO' : 'PENDIENTE');
   const motivoHtml = motivoTxt ? '<span class="estado-motivo">' + motivoTxt + '</span>' : '';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].conect;
-  const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+  const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Clic para cambiar';
   return '<td class="status-col"><div class="estado-wrap">' +
          '<button class="status conect-srv ' + cls +
@@ -853,7 +861,7 @@ function observacionCell(id) {
   const val = getObservacion(id);
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].observacion;
   const tip = s
-    ? ('Última observación por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR') + ' — clic para editar o agregar')
+    ? ('Última observación por ' + s.by + ' el ' + fmtDateTime(s.at) + ' — clic para editar o agregar')
     : 'Agregá una observación (queda en el historial con tu usuario)';
   const esc = (val || '').replace(/"/g, '&quot;').replace(/</g,'&lt;');
   return '<td class="observacion-col">' +
@@ -878,7 +886,7 @@ function stEstadoCell(id) {
     : '';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].estadoConect;
   const tip = s
-    ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + (resp ? ' · Repara: ' + resp : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+    ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + (resp ? ' · Repara: ' + resp : '') + ' — por ' + s.by + ' el ' + fmtDateTime(s.at))
     : ('Clic para marcar ' + (isOn ? 'SIN' : 'CON') + ' servicio');
   return '<td class="status-col"><div class="estado-wrap">' +
          '<button class="status estado-conect ' + cls +
@@ -905,7 +913,7 @@ function stQaCell(id) {
   const label = isOn ? 'QA OK' : (isOff ? 'QA RECHAZADO' : 'SIN QA');
   const motivoHtml = motivoTxt ? '<span class="estado-motivo">' + motivoTxt + '</span>' : '';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].qaEstado;
-  const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+  const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Clic para evaluar QA';
   return '<td class="status-col"><div class="estado-wrap">' +
          '<button class="status estado-qa ' + cls +
@@ -1126,7 +1134,7 @@ async function toggleHistoryRow(idTd) {
     const rowData = DATA.find(r => r.id === id);
     const ispDelPunto = rowData ? rowData.isp : '';
     const rows = entries.map(e => {
-      const when = new Date(e.ts).toLocaleString('es-AR');
+      const when = fmtDateTime(e.ts);
       const kind = e.field === 'estadoConect' ? 'estado' :
                    (e.field === 'motivoSinServicio' || e.field === 'motivoConect' || e.field === 'qaMotivo') ? 'motivo' : 'texto';
       const fLabel = fieldLabel[e.field] || e.field;
@@ -1704,7 +1712,7 @@ async function refreshFotoList(id) {
       '<div class="fm-item">' +
         '<img src="' + p.url + '" onclick="window.open(this.src)" alt="foto">' +
         '<div class="fm-meta"><b>' + (p.by || '—') + '</b><br>' +
-          new Date(p.at).toLocaleString('es-AR') +
+          fmtDateTime(p.at) +
           (p.caption ? '<br>' + p.caption.replace(/</g,'&lt;') : '') +
         '</div>' +
       '</div>').join('');

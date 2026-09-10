@@ -1684,6 +1684,15 @@ document.getElementById('ispFilter').addEventListener('click', (e) => {
   }
 });
 
+// Formato de fecha/hora unificado: "DD/MM/AAAA, HH:MMhs" en 24hs.
+function fmtDateTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear() +
+         ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + 'hs';
+}
+
 // ── NUEVAS FUNCIONES ─────────────────────────────────────────
 // Cadena de reparación por motivo:
 //   sin_energia | vandalizado          → FIBERCO
@@ -1786,7 +1795,7 @@ async function toggleProbHistoryRow(tr) {
       return cells[3] ? cells[3].textContent.trim() : '';
     })();
     const rowsHtml = relevantes.map(e => {
-      const when = new Date(e.ts).toLocaleString('es-AR');
+      const when = fmtDateTime(e.ts);
       const fLabel = e.field === 'estadoConect' ? 'Estado' : 'Motivo';
       // Mostramos "Responsable" solo cuando el motivo apunta a un problema
       let respCell = '<span style="color:var(--text3)">—</span>';
