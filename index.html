@@ -1564,6 +1564,13 @@ function updateMapFromRows(dataRows, keys) {
     const pdfFromLinks = (window.PDF_LINKS && window.PDF_LINKS[idStr]) || '';
     const pdfFromCell  = safe(r[keys.pdfUrl]||'');
     const pdfHref      = pdfFromLinks || (pdfFromCell.startsWith('http') ? pdfFromCell : '');
+    // Estado en el portal Control de avance (fuente de verdad); si no hay dato,
+    // caemos al valor original del Excel para retro-compatibilidad.
+    const st = (window.SERVER_STATUS || {})[idStr];
+    const portalConect      = st && st.conect       && st.conect.value === 'si';
+    const portalEnServicio  = st && st.estadoConect && st.estadoConect.value === 'con';
+    const portalGabinete    = st && st.gabineteEstado && st.gabineteEstado.value === 'si';
+    const portalIsp         = st && st.isp && st.isp.value ? String(st.isp.value).trim().toUpperCase() : null;
     cams.push({
       id: idStr,
       direccion: safe(r[keys.direccion]||''),
@@ -1572,11 +1579,11 @@ function updateMapFromRows(dataRows, keys) {
       totalCamaras: safeInt(r[keys.total]),
       fijas: safeInt(r[keys.fijas]),
       lpr: safeInt(r[keys.lpr]),
-      isp: safe(r[keys.isp]||''),
-      conectividad: safeInt(r[keys.conectividad]),
-      estadoCam: safeInt(r[keys.estadoCam]),
+      isp: portalIsp || safe(r[keys.isp]||''),
+      conectividad: portalConect ? 1 : (st ? 0 : safeInt(r[keys.conectividad])),
+      estadoCam:    portalEnServicio ? 1 : (st ? 0 : safeInt(r[keys.estadoCam])),
       relevado: safeInt(r[keys.relevado]),
-      instGabinete: safeInt(r[keys.instGab]),
+      instGabinete: portalGabinete ? 1 : (st ? 0 : safeInt(r[keys.instGab])),
       fechaGabinete: safe(r[keys.fechaGab]||''),
       fechaColumna: safe(r[keys.fechaCol]||''),
       fechaCamara: safe(r[keys.fechaCam]||''),
