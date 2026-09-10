@@ -762,26 +762,34 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, prev, next: value, autoGab, autoEstado, autoMotivoConect });
   }
 
-  // Enviar 1 email con TODOS los cambios acumulados de un punto desde la última
-  // notificación. Se llama desde el botón "CAMBIO DE ESTADO" del portal.
+  // Enviar 1 email con los cambios RECIENTES del punto (últimos 15 minutos).
+  // El historial completo del punto queda disponible expandiendo el ID en el portal;
+  // el email debe ser corto y mostrar solo la edición que está haciendo el operador ahora.
   if (m === 'POST' && url === '/api/status/notify') {
     let body = {}; try { body = JSON.parse(await readBody(req)); } catch {}
     const id = String(body.id || '').trim();
     if (!id) return json(res, 400, { error: 'falta id' });
     const all = loadStatuses();
     const lastAt = all[id] && all[id].lastNotifiedAt ? all[id].lastNotifiedAt : null;
+    // Ventana: últimos 15 minutos, pero nunca cambios ya notificados.
+    const WINDOW_MS = 15 * 60 * 1000;
+    const cutoffTime = new Date(Date.now() - WINDOW_MS).toISOString();
+    const cutoff = (lastAt && lastAt > cutoffTime) ? lastAt : cutoffTime;
     let entries = [];
     if (fs.existsSync(STATUS_LOG)) {
       const raw = fs.readFileSync(STATUS_LOG, 'utf8').split('\n').filter(Boolean);
       entries = raw.map(l => { try { return JSON.parse(l); } catch { return null; } })
                    .filter(Boolean)
-                   .filter(e => String(e.id) === id);
-      if (lastAt) entries = entries.filter(e => e.ts > lastAt);
+                   .filter(e => String(e.id) === id && e.ts > cutoff);
     }
     if (!entries.length) {
-      return json(res, 200, { ok: true, notified: 0, msg: 'Sin cambios nuevos desde la última notificación' });
+      return json(res, 200, { ok: true, notified: 0, msg: 'Sin cambios recientes para notificar' });
     }
     entries.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+    // De cada campo, dejar solo el ÚLTIMO cambio (evita listar SÍ→NO→SÍ como 3 entradas).
+    const lastByField = {};
+    for (const e of entries) lastByField[e.field] = e;
+    entries = Object.values(lastByField).sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
     const nowIso = new Date().toISOString();
     notifyChangesSummary({ id, cam: body.cam || null, by: sess.username, entries })
       .catch(e => console.log('[notify batch] error:', e.message));
