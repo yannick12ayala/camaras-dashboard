@@ -456,9 +456,16 @@ async function notifyChangesSummary({ id, cam, by, entries }) {
       <p style="margin-top:22px"><a href="${DASHBOARD_URL}/isp" style="background:#4d8ef0;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;font-size:13px;font-weight:600">Abrir Portal Control de avance</a></p>
       <p style="color:#999;font-size:11px;margin-top:22px">Este correo consolida todos los cambios acumulados desde la última notificación de este punto.</p>
     </div>`;
+  // Adjuntar cada foto referenciada en los cambios (field='foto', next=nombre de archivo).
+  const attachments = [];
+  for (const e of entries) {
+    if (e.field !== 'foto' || !e.next) continue;
+    const filePath = path.join(PHOTOS_DIR, String(id), String(e.next));
+    if (fs.existsSync(filePath)) attachments.push({ filename: String(e.next), path: filePath });
+  }
   try {
-    await mailer.sendMail({ from: SMTP_FROM, to: NOTIFY_TO.join(','), subject, html });
-    console.log('[mail-batch] enviado a', NOTIFY_TO.length, 'destinatarios ·', entries.length, 'cambios · id', id);
+    await mailer.sendMail({ from: SMTP_FROM, to: NOTIFY_TO.join(','), subject, html, attachments });
+    console.log('[mail-batch] enviado a', NOTIFY_TO.length, 'destinatarios ·', entries.length, 'cambios ·', attachments.length, 'fotos · id', id);
   } catch (e) {
     console.log('[mail-batch] error al enviar:', e.message);
   }
