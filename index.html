@@ -157,8 +157,9 @@
   .bar-row .bar-top { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; }
   .bar-row .bar-lbl { color: var(--text); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
   .bar-row .bar-pct { font-family: var(--mono); font-weight: 600; font-size: 11.5px; }
-  .bar-row .bar-track { position: relative; height: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-  .bar-row .bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); min-width: 2px; }
+  /* Barra: siempre se ve la pista completa en GRIS (lo que falta), y el fill del color encima marca lo cumplido */
+  .bar-row .bar-track { position: relative; height: 10px; background: #3a3f52; border: 1px solid #4a5065; border-radius: 5px; overflow: hidden; }
+  .bar-row .bar-fill { height: 100%; border-radius: 4px; transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); min-width: 2px; }
   .bar-row .bar-num { font-family: var(--mono); font-weight: 700; font-size: 15px; text-align: right; min-width: 32px; }
   .relevamiento-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
   .relevamiento-pct { font-size: 28px; font-weight: 600; color: var(--text); letter-spacing: -0.03em; }
