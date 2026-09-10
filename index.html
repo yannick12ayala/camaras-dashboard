@@ -941,7 +941,6 @@ function processRows(rows) {
     sin_energia:   'Sin energía',
     vandalizado:   'Vandalizado',
   };
-  const SS  = window.SERVER_STATUS || {};
   const HAD = window.IDS_QUE_TUVIERON_SIN || new Set();
   const camRows = dataRows.map(r => {
     const id = String(r[Object.keys(r)[0]]||'').replace('.0','');
