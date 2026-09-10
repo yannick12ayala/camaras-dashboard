@@ -158,7 +158,7 @@
   .bar-row .bar-lbl { color: var(--text); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
   .bar-row .bar-pct { font-family: var(--mono); font-weight: 600; font-size: 11.5px; }
   /* Barra: siempre se ve la pista completa en GRIS (lo que falta), y el fill del color encima marca lo cumplido */
-  .bar-row .bar-track { position: relative; height: 10px; background: #3a3f52; border: 1px solid #4a5065; border-radius: 5px; overflow: hidden; }
+  .bar-row .bar-track { position: relative; height: 10px; background: #4a5065; border: 1px solid #5a6079; border-radius: 5px; overflow: hidden; }
   .bar-row .bar-fill { height: 100%; border-radius: 4px; transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); min-width: 2px; }
   .bar-row .bar-num { font-family: var(--mono); font-weight: 700; font-size: 15px; text-align: right; min-width: 32px; }
   .relevamiento-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
@@ -1028,7 +1028,7 @@ function renderDonut(container, key, name, done, total, color) {
     type: 'doughnut',
     data: { labels: ['Activos', 'Resto'],
       datasets: [{ data: [done, Math.max(0, total - done)],
-        backgroundColor: [pctColor, '#1e2335'], borderWidth: 3, borderColor: '#181c27', hoverOffset: 4 }] },
+        backgroundColor: [pctColor, '#4a5065'], borderWidth: 3, borderColor: '#181c27', hoverOffset: 4 }] },
     options: { responsive: false, cutout: '72%',
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ': ' + ctx.raw } } } }
   });
