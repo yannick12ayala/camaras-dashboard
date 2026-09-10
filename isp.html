@@ -185,6 +185,15 @@ td.coord{font-family:'JetBrains Mono',monospace; font-size:11.5px; white-space:n
 /* QA sin evaluar: gris/pendiente */
 .status.pending{color:var(--muted); background:rgba(139,144,167,0.10); border-color:rgba(139,144,167,0.35)}
 .status.pending .dot{background:var(--muted); box-shadow:0 0 0 3px rgba(139,144,167,0.22), 0 0 8px rgba(139,144,167,0.5)}
+/* Botón de reset (solo admin) — vuelve el campo a PENDIENTE (borra el valor guardado).
+   Está oculto por default; se muestra solo si <body> tiene la clase `is-admin`. */
+.reset-btn{
+  display:none; margin-left:6px; padding:3px 6px; font:inherit; font-size:11px; font-weight:700;
+  border:1px solid rgba(139,144,167,0.35); background:rgba(139,144,167,0.10); color:var(--muted);
+  border-radius:4px; cursor:pointer; vertical-align:middle; transition:all .15s;
+}
+.reset-btn:hover{background:rgba(139,144,167,0.25); color:var(--ink); border-color:var(--muted)}
+body.is-admin .reset-btn{display:inline-block}
 .status.edited::after{
   content:''; width:5px; height:5px; border-radius:50%; background:var(--accent); margin-left:2px;
 }
@@ -583,6 +592,11 @@ function statusHTML(id, col, val, edited){
   const label = val === 'si' ? 'SÍ' : 'NO';
   return `<button class="status ${val}${edited?' edited':''}" data-id="${id}" data-col="${col}" title="Clic para cambiar a ${val==='si'?'NO':'SÍ'}"><span class="dot"></span>${label}</button>`;
 }
+// Botón "restablecer a PENDIENTE" — visible solo cuando <body> tiene .is-admin.
+// Al cliquearlo, POST /api/status con value='' borra el valor guardado en el server.
+function resetBtn(id, field) {
+  return '<button class="reset-btn" data-reset-id="' + id + '" data-reset-field="' + field + '" title="Restablecer a PENDIENTE (solo admin)">↺</button>';
+}
 // Postes: persistente en el server (SERVER_STATUS[id].postes = 'si' | 'no').
 function getPostes(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
@@ -595,7 +609,7 @@ function stPostesCell(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
   const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
                 : 'Clic para evaluar el poste';
-  return `<td class="status-col"><button class="status ${cls}" data-postes-id="${id}" title="${tip}"><span class="dot"></span>${label}</button></td>`;
+  return `<td class="status-col"><button class="status ${cls}" data-postes-id="${id}" title="${tip}"><span class="dot"></span>${label}</button>${resetBtn(id, 'postes')}</td>`;
 }
 async function togglePostes(id) {
   const cur = getPostes(id);
@@ -749,7 +763,8 @@ function stGabineteCell(id) {
   const label = isVand ? 'VANDALIZADO' : (isOn ? 'SÍ' : (isOff ? 'NO' : 'PENDIENTE'));
   const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar (aún sin evaluar)';
   return '<td class="status-col"><button class="status gabinete-srv ' + cls +
-         '" data-gabinete-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
+         '" data-gabinete-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button>' +
+         resetBtn(id, 'gabineteEstado') + '</td>';
 }
 
 // Gabinete energizado (persistente en el server, compartido)
@@ -777,7 +792,8 @@ function stEnergizadoCell(id) {
   else              { cls = 'pending';      label = 'PENDIENTE'; }
   const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar (aún sin evaluar)';
   return '<td class="status-col"><button class="status energizado ' + cls +
-         '" data-energizado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
+         '" data-energizado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button>' +
+         resetBtn(id, 'gabineteEnergizado') + '</td>';
 }
 
 // Conectividad (persistente en el server, compartido — antes localStorage)
@@ -824,6 +840,7 @@ function stConectCell(id) {
   return '<td class="status-col"><div class="estado-wrap">' +
          '<button class="status conect-srv ' + cls +
          '" data-conect-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + motivoHtml + '</button>' +
+         resetBtn(id, 'conect') +
          '</div></td>';
 }
 
@@ -874,6 +891,7 @@ function stEstadoCell(id) {
   return '<td class="status-col"><div class="estado-wrap">' +
          '<button class="status estado-conect ' + cls +
          '" data-estado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + motivoHtml + '</button>' +
+         resetBtn(id, 'estadoConect') +
          '</div></td>';
 }
 
@@ -901,6 +919,7 @@ function stQaCell(id) {
   return '<td class="status-col"><div class="estado-wrap">' +
          '<button class="status estado-qa ' + cls +
          '" data-qa-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + motivoHtml + '</button>' +
+         resetBtn(id, 'qaEstado') +
          '</div></td>';
 }
 
@@ -1664,6 +1683,42 @@ async function uploadFoto(id, file) {
 
 // Delegated click handler for toggles
 document.addEventListener('click', async (e) => {
+  // ── Botón Reset (solo admin) — borra el valor guardado y deja el estado en PENDIENTE ──
+  const resetB = e.target.closest && e.target.closest('.reset-btn');
+  if (resetB) {
+    if (!window.IS_ADMIN) return;
+    e.stopPropagation();
+    const id = resetB.dataset.resetId, field = resetB.dataset.resetField;
+    if (!id || !field) return;
+    if (!confirm('¿Restablecer este campo a PENDIENTE? Se guardará el cambio en el historial.')) return;
+    try {
+      const resp = await fetch('/api/status', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, field, value: '' }),
+      });
+      if (resp.status === 401) { location.href = '/login'; return; }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      window.SERVER_STATUS = window.SERVER_STATUS || {};
+      window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+      window.SERVER_STATUS[id][field] = { value: '', by: '(vos)', at: new Date().toISOString() };
+      // Repintar solo la celda afectada usando la función de render correspondiente
+      const cellRender = {
+        postes:             stPostesCell,
+        gabineteEstado:     stGabineteCell,
+        gabineteEnergizado: stEnergizadoCell,
+        conect:             stConectCell,
+        estadoConect:       stEstadoCell,
+        qaEstado:           stQaCell,
+      }[field];
+      const btn = resetB.previousElementSibling && resetB.previousElementSibling.classList.contains('status') ? resetB.previousElementSibling : null;
+      const td = resetB.closest('td');
+      if (cellRender && td) td.outerHTML = cellRender(id);
+    } catch (err) {
+      alert('No se pudo restablecer: ' + err.message);
+    }
+    return;
+  }
+
   // ── Botón Foto (abre modal) ──
   const fotoBtn = e.target.closest && e.target.closest('[data-foto-id]');
   if (fotoBtn) { await openFotoModal(fotoBtn.dataset.fotoId); return; }
@@ -1817,11 +1872,18 @@ render();
 // ── Carga de datos EN VIVO desde /api/data (mismo Excel que el dashboard principal) ──
 async function bootstrap() {
   try {
-    const [xlsxResp, linksResp, statusResp] = await Promise.all([
+    const [xlsxResp, linksResp, statusResp, meResp] = await Promise.all([
       fetch('/api/data', { cache: 'no-store' }),
       fetch('/api/hyperlinks', { cache: 'no-store' }).catch(() => null),
       fetch('/api/status', { cache: 'no-store' }).catch(() => null),
+      fetch('/api/me', { cache: 'no-store' }).catch(() => null),
     ]);
+    // Guardamos si el usuario es admin para mostrar controles adicionales
+    try {
+      const me = meResp && meResp.ok ? await meResp.json() : null;
+      window.IS_ADMIN = !!(me && me.isAdmin);
+      if (window.IS_ADMIN) document.body.classList.add('is-admin');
+    } catch { window.IS_ADMIN = false; }
     if (xlsxResp.status === 401) { location.href = '/login'; return; }
     if (!xlsxResp.ok) throw new Error('HTTP ' + xlsxResp.status);
     const buf = await xlsxResp.arrayBuffer();

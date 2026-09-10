@@ -616,7 +616,7 @@ const server = http.createServer(async (req, res) => {
     if (!id || !field) return json(res, 400, { error: 'faltan id o field' });
     // Campos permitidos: cerrados (lista de valores) o libres (texto acotado)
     const closed = {
-      estadoConect: ['con', 'sin'],
+      estadoConect: ['con', 'sin', ''],
       // Motivo cuando estadoConect = 'sin'. '' = limpiar (cuando vuelve a 'con').
       motivoSinServicio: ['onu_alarmada', 'fibra_cortada', 'sin_energia', 'vandalizado', 'falla_enrutamiento', ''],
       // Conectividad instalada (antes era localStorage; ahora compartido en server)
@@ -632,7 +632,7 @@ const server = http.createServer(async (req, res) => {
       gabineteEstado: ['si', 'no', 'vandalizado', ''],
       // QA: validación independiente del ISP. Mismas opciones que "Instalación
       // de cámara"; dispara los mismos efectos automáticos sobre gabinete/energizado/motivoConect.
-      qaEstado: ['con', 'sin'],
+      qaEstado: ['con', 'sin', ''],
       qaMotivo: ['en_servicio', 'onu_alarmada', 'vandalizado', 'fibra_cortada', 'falla_enrutamiento', ''],
       // Poste instalado (fue localStorage, ahora persistente en server para que el dashboard lo cuente)
       postes: ['si', 'no', ''],
