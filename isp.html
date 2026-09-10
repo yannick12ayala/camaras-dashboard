@@ -586,18 +586,20 @@ function statusHTML(id, col, val, edited){
 // Postes: persistente en el server (SERVER_STATUS[id].postes = 'si' | 'no').
 function getPostes(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
-  return s && s.value ? s.value : 'no';
+  return s && s.value ? s.value : '';
 }
 function stPostesCell(id) {
-  const val = getPostes(id); // 'si' | 'no'
-  const label = val === 'si' ? 'SÍ' : 'NO';
+  const val = getPostes(id); // '' | 'si' | 'no'
+  const cls = val === 'si' ? 'si' : (val === 'no' ? 'no' : 'pending');
+  const label = val === 'si' ? 'SÍ' : (val === 'no' ? 'NO' : 'PENDIENTE');
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
   const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
-                : ('Clic para marcar ' + (val === 'si' ? 'NO' : 'SÍ'));
-  return `<td class="status-col"><button class="status ${val}" data-postes-id="${id}" title="${tip}"><span class="dot"></span>${label}</button></td>`;
+                : 'Clic para evaluar el poste';
+  return `<td class="status-col"><button class="status ${cls}" data-postes-id="${id}" title="${tip}"><span class="dot"></span>${label}</button></td>`;
 }
 async function togglePostes(id) {
   const cur = getPostes(id);
+  // Ciclo: (vacío/pendiente) → SÍ → NO → SÍ …
   const nxt = cur === 'si' ? 'no' : 'si';
   try {
     const resp = await fetch('/api/status', {
@@ -618,7 +620,7 @@ async function togglePostes(id) {
 // Estado de conectividad (persistente en el server, compartido entre todos)
 function getEstado(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].estadoConect;
-  return s && s.value ? s.value : 'sin'; // por defecto: 'sin' servicio
+  return s && s.value ? s.value : ''; // '' = sin evaluar (gris "PENDIENTE")
 }
 // N° de servicio: input editable, persistente en el server
 function getNumServicio(id) {
@@ -741,9 +743,11 @@ function stGabineteCell(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEstado;
   const isVand = val === 'vandalizado';
   const isOn = val === 'si';
-  const cls = isVand ? 'vandalizado' : (isOn ? 'si' : 'no');
-  const label = isVand ? 'VANDALIZADO' : (isOn ? 'SÍ' : 'NO');
-  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar';
+  const isOff = val === 'no';
+  // Gris "PENDIENTE" cuando el técnico aún no lo evaluó (val === '').
+  const cls = isVand ? 'vandalizado' : (isOn ? 'si' : (isOff ? 'no' : 'pending'));
+  const label = isVand ? 'VANDALIZADO' : (isOn ? 'SÍ' : (isOff ? 'NO' : 'PENDIENTE'));
+  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar (aún sin evaluar)';
   return '<td class="status-col"><button class="status gabinete-srv ' + cls +
          '" data-gabinete-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
 }
@@ -756,19 +760,22 @@ function getEnergizado(id) {
 function stEnergizadoCell(id) {
   const val = getEnergizado(id);
   const isOn = val === 'si';
+  const isOff = val === 'no';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].gabineteEnergizado;
   // Casos automáticos:
   //  1) Vandalizado → botón rojo "SIN SERVICIO"
   //  2) Sin energía → botón ámbar "SIN ENERGÍA"
   //  3) Sin motivo específico (manual NO) → botón rojo "NO"
+  //  4) Sin evaluar (val === '') → gris "PENDIENTE"
   const isAutoOff = !isOn && s && typeof s.by === 'string' && s.by.startsWith('auto');
   const isVand    = isAutoOff && s.by.indexOf('vandalizado') >= 0;
   let cls, label;
   if (isOn)         { cls = 'si';           label = 'SÍ'; }
   else if (isVand)  { cls = 'sin-servicio'; label = 'SIN SERVICIO'; }
   else if (isAutoOff){ cls = 'sin-energia'; label = 'SIN ENERGÍA'; }
-  else              { cls = 'no';           label = 'NO'; }
-  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar';
+  else if (isOff)   { cls = 'no';           label = 'NO'; }
+  else              { cls = 'pending';      label = 'PENDIENTE'; }
+  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR')) : 'Clic para cambiar (aún sin evaluar)';
   return '<td class="status-col"><button class="status energizado ' + cls +
          '" data-energizado-id="' + id + '" title="' + tip + '"><span class="dot"></span>' + label + '</button></td>';
 }
@@ -800,14 +807,16 @@ const CONECT_MOTIVOS_MAP = [...CONECT_MOTIVOS, ...CONECT_MOTIVOS_EXTRA]
 function stConectCell(id) {
   const val = getConectSrv(id);
   const isOn = val === 'si';
+  const isOff = val === 'no';
   const motivo = isOn ? getConectMotivo(id) : '';
   const motivoTxt = motivo && CONECT_MOTIVOS_MAP[motivo] ? CONECT_MOTIVOS_MAP[motivo] : '';
   // Motivos que representan un problema activo — el botón se pone en rojo
   // aunque la conectividad esté instalada (conect='si').
   const PROBLEMAS = ['onu_alarmada','fibra_cortada','sin_energia','vandalizado','falla_enrutamiento'];
   const esProblema = PROBLEMAS.indexOf(motivo) >= 0;
-  const cls = isOn ? (esProblema ? 'no' : 'si') : 'no';
-  const label = isOn ? 'SÍ' : 'NO';
+  // Gris "PENDIENTE" cuando val === ''.
+  const cls = isOn ? (esProblema ? 'no' : 'si') : (isOff ? 'no' : 'pending');
+  const label = isOn ? 'SÍ' : (isOff ? 'NO' : 'PENDIENTE');
   const motivoHtml = motivoTxt ? '<span class="estado-motivo">' + motivoTxt + '</span>' : '';
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].conect;
   const tip = s ? (label + (motivoTxt ? ' · ' + motivoTxt : '') + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
@@ -845,12 +854,13 @@ function observacionCell(id) {
 }
 
 function stEstadoCell(id) {
-  const val = getEstado(id); // 'con' | 'sin'
+  const val = getEstado(id); // '' | 'con' | 'sin'
   const isOn = val === 'con';
-  const cls = isOn ? 'si' : 'no';
-  const motivo = !isOn ? getMotivo(id) : '';
+  const isOff = val === 'sin';
+  const cls = isOn ? 'si' : (isOff ? 'no' : 'pending');
+  const motivo = isOff ? getMotivo(id) : '';
   const motivoTxt = motivo && MOTIVOS_MAP[motivo] ? MOTIVOS_MAP[motivo] : '';
-  const label = isOn ? 'EN SERVICIO' : 'SIN SERVICIO';
+  const label = isOn ? 'EN SERVICIO' : (isOff ? 'SIN SERVICIO' : 'PENDIENTE');
   // Responsable de la reparación (según el motivo + ISP del punto)
   const row = DATA.find(r => r.id === id);
   const resp = !isOn && motivo ? responsableDe(motivo, row && row.isp) : '';
