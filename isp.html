@@ -732,16 +732,31 @@ const MOTIVOS = [
   { key: 'falla_enrutamiento', label: 'Falla de enrutamiento' },
 ];
 const MOTIVOS_MAP = MOTIVOS.reduce((m, x) => (m[x.key] = x.label, m), {});
-// Cadena de reparación por motivo:
-//   sin_energia | vandalizado          → FIBERCO
-//   onu_alarmada | falla_enrutamiento  → el ISP asignado a ese punto
-//   fibra_cortada                      → el ISP asignado
-function responsableDe(motivoKey, ispDelPunto) {
-  if (motivoKey === 'sin_energia' || motivoKey === 'vandalizado') return 'FIBERCO';
-  if (motivoKey === 'onu_alarmada' || motivoKey === 'falla_enrutamiento' || motivoKey === 'fibra_cortada') {
-    return (ispDelPunto && String(ispDelPunto).trim()) ? String(ispDelPunto).trim().toUpperCase() : 'ISP';
+// Cadena de reparación:
+//   Tareas físicas (postes, gabinete, energizado) → FIBERCO
+//   Motivos de problema:
+//     sin_energia | vandalizado          → FIBERCO
+//     onu_alarmada | falla_enrutamiento  → ISP asignado
+//     fibra_cortada                      → FIBERCO o ISP (dos posibles reparadores)
+//   Devuelve un array de responsables (puede haber 1 o 2).
+function responsableDeCambio(field, motivoOrValue, ispDelPunto) {
+  const isp = (ispDelPunto && String(ispDelPunto).trim())
+    ? String(ispDelPunto).trim().toUpperCase() : 'ISP';
+  if (field === 'postes' || field === 'gabineteEstado' || field === 'gabineteEnergizado') {
+    return ['FIBERCO'];
   }
-  return '';
+  if (field === 'motivoSinServicio' || field === 'qaMotivo' || field === 'motivoConect') {
+    const k = String(motivoOrValue || '');
+    if (k === 'sin_energia' || k === 'vandalizado') return ['FIBERCO'];
+    if (k === 'onu_alarmada' || k === 'falla_enrutamiento') return [isp];
+    if (k === 'fibra_cortada') return ['FIBERCO', isp];
+  }
+  return [];
+}
+// Compat: la firma antigua (motivoKey, isp) sigue funcionando devolviendo string.
+function responsableDe(motivoKey, ispDelPunto) {
+  const arr = responsableDeCambio('motivoSinServicio', motivoKey, ispDelPunto);
+  return arr.join(' o ');
 }
 function getMotivo(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].motivoSinServicio;
@@ -879,7 +894,9 @@ function stEstadoCell(id) {
   const label = isOn ? 'EN SERVICIO' : (isOff ? 'SIN SERVICIO' : 'PENDIENTE');
   // Responsable de la reparación (según el motivo + ISP del punto)
   const row = DATA.find(r => r.id === id);
-  const resp = !isOn && motivo ? responsableDe(motivo, row && row.isp) : '';
+  const resp = (isOff && motivo)
+    ? responsableDeCambio('motivoSinServicio', motivo, row && row.isp).join(' o ')
+    : '';
   const motivoHtml = motivoTxt
     ? '<span class="estado-motivo">' + motivoTxt + (resp ? ' · <b>' + resp + '</b>' : '') + '</span>'
     : '';
@@ -1137,13 +1154,20 @@ async function toggleHistoryRow(idTd) {
       const kind = e.field === 'estadoConect' ? 'estado' :
                    (e.field === 'motivoSinServicio' || e.field === 'motivoConect' || e.field === 'qaMotivo') ? 'motivo' : 'texto';
       const fLabel = fieldLabel[e.field] || e.field;
-      // Cadena de reparación: solo cuando el motivo es un problema activo
+      // Cadena de reparación (nueva lógica): también aplica a Postes/Gabinete/Energizado.
+      // Para motivos solo se muestra cuando el "next" es un problema (no 'en_servicio' / '').
       let respCell = '<span style="color:var(--muted)">—</span>';
-      if ((e.field === 'motivoSinServicio' || e.field === 'qaMotivo') && e.next && e.next !== '' && e.next !== 'en_servicio') {
-        const resp = responsableDe(e.next, ispDelPunto);
-        if (resp) {
-          const color = resp === 'FIBERCO' ? '#a78bfa' : 'var(--accent)';
-          respCell = '<b style="color:' + color + '">' + resp + '</b>';
+      const esMotivoFld = ['motivoSinServicio','qaMotivo','motivoConect'].includes(e.field);
+      const showResp = ['postes','gabineteEstado','gabineteEnergizado'].includes(e.field)
+        || (esMotivoFld && e.next && e.next !== '' && e.next !== 'en_servicio');
+      if (showResp) {
+        const arr = responsableDeCambio(e.field, e.next, ispDelPunto);
+        if (arr.length) {
+          const parts = arr.map(r => {
+            const color = r === 'FIBERCO' ? '#a78bfa' : 'var(--accent)';
+            return '<b style="color:' + color + '">' + r + '</b>';
+          });
+          respCell = parts.join(' <span style="color:var(--muted);font-weight:400">o</span> ');
         }
       }
       // Observaciones: append-only. Se muestra solo el nuevo texto, sin la
@@ -1304,7 +1328,7 @@ document.addEventListener('click', async (e) => {
   const id = btn.dataset.notifyId;
   if (!id) return;
   const row = DATA.find(r => r.id === id);
-  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
+  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio, isp: getIspAsignado(row.id) } : null;
   btn.disabled = true;
   btn.classList.add('sending');
   const originalText = btn.textContent;
@@ -1432,7 +1456,7 @@ async function saveCantidadMB(input) {
 // Igual que setEstadoSinMotivo pero para QA (qaEstado + qaMotivo)
 async function setQaSinMotivo(id, nextEstado, motivo) {
   const row = DATA.find(r => r.id === id);
-  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
+  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio, isp: getIspAsignado(row.id) } : null;
   try {
     const mResp = await fetch('/api/status', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1477,7 +1501,7 @@ async function setQaSinMotivo(id, nextEstado, motivo) {
 
 async function setEstadoSinMotivo(id, nextEstado, motivo) {
   const row = DATA.find(r => r.id === id);
-  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
+  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio, isp: getIspAsignado(row.id) } : null;
   try {
     // 1) Guardar el motivo (o limpiarlo si vuelve a CON)
     const mResp = await fetch('/api/status', {
@@ -1589,7 +1613,7 @@ const CELL_RENDERERS = {
 };
 async function saveField(id, field, value) {
   const row = DATA.find(r => r.id === id);
-  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
+  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio, isp: getIspAsignado(row.id) } : null;
   const resp = await fetch('/api/status', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id, field, value, cam }),
@@ -1646,7 +1670,7 @@ function openStateMenu(btn, title, values, field, onPick) {
 // ── Toggle "Conectividad" con menú de motivo al pasar a SÍ ──
 async function setConect(id, nextVal, motivo) {
   const row = DATA.find(r => r.id === id);
-  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio } : null;
+  const cam = row ? { dir: row.dir, loc: row.loc, barrio: row.barrio, isp: getIspAsignado(row.id) } : null;
   try {
     // Guardar motivo primero (el server aplica reglas auto al recibirlo)
     const mResp = await fetch('/api/status', { method: 'POST', headers: { 'Content-Type': 'application/json' },

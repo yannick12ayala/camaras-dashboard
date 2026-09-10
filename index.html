@@ -1699,19 +1699,29 @@ function fmtDateTime(iso) {
 }
 
 // ── NUEVAS FUNCIONES ─────────────────────────────────────────
-// Cadena de reparación por motivo:
-//   sin_energia | vandalizado          → FIBERCO
-//   onu_alarmada | falla_enrutamiento  → el ISP asignado a ese punto
-//   fibra_cortada                      → el ISP asignado (por defecto — ajustar si cambia)
-function responsableDe(motivo, isp) {
-  const m = String(motivo || '').toLowerCase();
-  if (m === 'sin energía' || m === 'sin energia' || m === 'sin_energia' || m === 'vandalizado') return 'FIBERCO';
-  if (m === 'onu alarmada' || m === 'onu_alarmada' ||
-      m === 'falla de enrutamiento' || m === 'falla_enrutamiento' ||
-      m === 'fibra cortada' || m === 'fibra_cortada') {
-    return (isp && String(isp).trim()) ? String(isp).trim().toUpperCase() : 'ISP';
+// Cadena de reparación (nueva lógica):
+//   Tareas físicas (postes, gabinete, energizado) → FIBERCO
+//   Motivos:
+//     sin_energia | vandalizado          → FIBERCO
+//     onu_alarmada | falla_enrutamiento  → ISP asignado
+//     fibra_cortada                      → FIBERCO o ISP (dos opciones)
+function responsableDeCambio(field, motivoOrValue, ispDelPunto) {
+  const isp = (ispDelPunto && String(ispDelPunto).trim())
+    ? String(ispDelPunto).trim().toUpperCase() : 'ISP';
+  if (field === 'postes' || field === 'gabineteEstado' || field === 'gabineteEnergizado') return ['FIBERCO'];
+  if (field === 'motivoSinServicio' || field === 'qaMotivo' || field === 'motivoConect') {
+    const k = String(motivoOrValue || '').toLowerCase()
+      .replace(/ /g, '_').replace(/í/g, 'i').replace(/á/g, 'a');
+    if (k === 'sin_energia' || k === 'vandalizado') return ['FIBERCO'];
+    if (k === 'onu_alarmada' || k === 'falla_de_enrutamiento' || k === 'falla_enrutamiento') return [isp];
+    if (k === 'fibra_cortada') return ['FIBERCO', isp];
   }
-  return '—';
+  return [];
+}
+// Compat con la firma antigua usada en la tabla de incidentes.
+function responsableDe(motivo, isp) {
+  const arr = responsableDeCambio('motivoSinServicio', motivo, isp);
+  return arr.length ? arr.join(' o ') : '—';
 }
 
 function renderProblemas(rows) {
@@ -1802,12 +1812,20 @@ async function toggleProbHistoryRow(tr) {
     const rowsHtml = relevantes.map(e => {
       const when = fmtDateTime(e.ts);
       const fLabel = e.field === 'estadoConect' ? 'Estado' : 'Motivo';
-      // Mostramos "Responsable" solo cuando el motivo apunta a un problema
+      // Mostramos "Repara" para motivos con problema o tareas físicas.
       let respCell = '<span style="color:var(--text3)">—</span>';
-      if (e.field === 'motivoSinServicio' && e.next && e.next !== '' && e.next !== 'en_servicio') {
-        const resp = responsableDe(e.next, ispDelPunto);
-        const respColor = resp === 'FIBERCO' ? '#a78bfa' : '#22d3ee';
-        respCell = `<span style="color:${respColor};font-weight:600;font-size:11px;font-family:var(--mono);letter-spacing:.03em">${resp}</span>`;
+      const isTareaFisica = ['postes','gabineteEstado','gabineteEnergizado'].includes(e.field);
+      const isMotivoProblema = ['motivoSinServicio','qaMotivo','motivoConect'].includes(e.field)
+        && e.next && e.next !== '' && e.next !== 'en_servicio';
+      if (isTareaFisica || isMotivoProblema) {
+        const arr = responsableDeCambio(e.field, e.next, ispDelPunto);
+        if (arr.length) {
+          const parts = arr.map(r => {
+            const c = r === 'FIBERCO' ? '#a78bfa' : '#22d3ee';
+            return `<span style="color:${c};font-weight:600;font-size:11px;font-family:var(--mono)">${r}</span>`;
+          });
+          respCell = parts.join(' <span style="color:var(--text3)">o</span> ');
+        }
       }
       return `<tr>
         <td style="padding:6px 10px;color:var(--text2);font-size:11px;white-space:nowrap">${when}</td>

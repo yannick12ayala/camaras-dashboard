@@ -427,12 +427,53 @@ async function notifyChangesSummary({ id, cam, by, entries }) {
     sin_energia: 'Sin energía', falla_enrutamiento: 'Falla de enrutamiento',
   };
   const fmt = (v) => (v === null || v === undefined || v === '') ? '—' : (VAL_LABEL[v] || String(v));
+  // Cadena de reparación aplicada:
+  //   postes / gabineteEstado / gabineteEnergizado → FIBERCO
+  //   motivoSinServicio | qaMotivo | motivoConect:
+  //     'vandalizado' | 'sin_energia' → FIBERCO
+  //     'onu_alarmada' | 'falla_enrutamiento' → ISP del punto
+  //     'fibra_cortada' → FIBERCO o ISP
+  const ispDelPunto = cam && cam.isp ? String(cam.isp).trim().toUpperCase() : 'ISP';
+  const responsableEmail = (field, next) => {
+    if (['postes','gabineteEstado','gabineteEnergizado'].includes(field)) return ['FIBERCO'];
+    if (['motivoSinServicio','qaMotivo','motivoConect'].includes(field)) {
+      const k = String(next || '');
+      if (k === 'sin_energia' || k === 'vandalizado') return ['FIBERCO'];
+      if (k === 'onu_alarmada' || k === 'falla_enrutamiento') return [ispDelPunto];
+      if (k === 'fibra_cortada') return ['FIBERCO', ispDelPunto];
+    }
+    return [];
+  };
   const rowsHtml = entries.map(e => {
     const when = new Date(e.ts).toLocaleString('es-AR');
     const fLabel = FIELD_LABEL[e.field] || e.field;
+    // Muestra especial para observación (append-only): sin prev → next.
+    let cambioHtml;
+    if (e.field === 'observacion') {
+      const txt = fmt(e.next);
+      cambioHtml = `<b>${fLabel}:</b> "${txt}"`;
+    } else if (e.field === 'foto') {
+      cambioHtml = `<b>${fLabel}:</b> ${fmt(e.next)}`;
+    } else {
+      cambioHtml = `<b>${fLabel}:</b> ${fmt(e.prev)} → <b>${fmt(e.next)}</b>`;
+    }
+    // Columna Repara
+    const arr = responsableEmail(e.field, e.next);
+    const isTareaFisica = ['postes','gabineteEstado','gabineteEnergizado'].includes(e.field);
+    const isMotivoProblema = ['motivoSinServicio','qaMotivo','motivoConect'].includes(e.field)
+      && e.next && e.next !== '' && e.next !== 'en_servicio';
+    let reparaCell = '<span style="color:#aaa">—</span>';
+    if ((isTareaFisica || isMotivoProblema) && arr.length) {
+      const parts = arr.map(r => {
+        const c = r === 'FIBERCO' ? '#7c5fe6' : '#0891b2';
+        return `<b style="color:${c}">${r}</b>`;
+      });
+      reparaCell = parts.join(' <span style="color:#888">o</span> ');
+    }
     return `<tr>
       <td style="padding:6px 10px;font-size:11px;color:#888;white-space:nowrap;border-bottom:1px solid #f0f0f4">${when}</td>
-      <td style="padding:6px 10px;font-size:12px;border-bottom:1px solid #f0f0f4"><b>${fLabel}:</b> ${fmt(e.prev)} → <b>${fmt(e.next)}</b></td>
+      <td style="padding:6px 10px;font-size:12px;border-bottom:1px solid #f0f0f4">${cambioHtml}</td>
+      <td style="padding:6px 10px;font-size:11px;border-bottom:1px solid #f0f0f4">${reparaCell}</td>
       <td style="padding:6px 10px;font-size:11px;color:#666;border-bottom:1px solid #f0f0f4">por ${e.by || '—'}</td>
     </tr>`;
   }).join('');
@@ -448,13 +489,20 @@ async function notifyChangesSummary({ id, cam, by, entries }) {
           <tr>
             <th style="padding:8px 10px;text-align:left;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.04em">Cuándo</th>
             <th style="padding:8px 10px;text-align:left;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.04em">Cambio</th>
+            <th style="padding:8px 10px;text-align:left;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.04em">Repara</th>
             <th style="padding:8px 10px;text-align:left;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.04em">Usuario</th>
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
       </table>
       <p style="margin-top:22px"><a href="${DASHBOARD_URL}/isp" style="background:#4d8ef0;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;font-size:13px;font-weight:600">Abrir Portal Control de avance</a></p>
-      <p style="color:#999;font-size:11px;margin-top:22px">Este correo consolida todos los cambios acumulados desde la última notificación de este punto.</p>
+      <div style="background:#f7f7fa;border:1px solid #e5e5ec;border-radius:6px;padding:12px 14px;margin-top:22px;font-size:11.5px;color:#555;line-height:1.55">
+        <b style="color:#333">Cadena de reparación</b><br>
+        · <b style="color:#7c5fe6">FIBERCO</b> se encarga de: postes, gabinete, energizado, vandalizado y sin energía.<br>
+        · <b style="color:#0891b2">ISP asignado al punto</b> se encarga de: ONU alarmada y falla de enrutamiento.<br>
+        · <b style="color:#7c5fe6">FIBERCO</b> <span style="color:#888">o</span> <b style="color:#0891b2">ISP asignado</b>: fibra cortada (según de qué lado del gabinete esté el corte).
+      </div>
+      <p style="color:#999;font-size:11px;margin-top:14px">Este correo consolida los cambios recientes del punto (últimos 15 minutos, uno por campo).</p>
     </div>`;
   // Adjuntar cada foto referenciada en los cambios (field='foto', next=nombre de archivo).
   const attachments = [];
