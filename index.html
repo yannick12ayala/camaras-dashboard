@@ -906,8 +906,8 @@ function processRows(rows) {
     ispData[isp].total += 1;
     // Factible = poste + gabinete instalados (ambos SÍ en el portal).
     if (stEq(r, 'postes', 'si') && stEq(r, 'gabineteEstado', 'si')) ispData[isp].factibles += 1;
-    // Conectividad ISP tendida = conect === 'si' en el portal.
-    if (stEq(r, 'conect', 'si')) ispData[isp].conectadas += 1;
+    // Conectividad ISP tendida = conect='si' Y no vandalizada.
+    if (stEq(r, 'conect', 'si') && !stEq(r, 'motivoConect', 'vandalizado')) ispData[isp].conectadas += 1;
     // Con servicio = estadoConect === 'con'.
     if (stEq(r, 'estadoConect', 'con')) ispData[isp].conServicio += 1;
     // QA aprobado.
@@ -923,7 +923,9 @@ function processRows(rows) {
   // Cuando ese estado no fue cargado aún, la métrica queda en 0.
   const instGabCount     = dataRows.filter(r => stEq(r, 'gabineteEstado', 'si')).length;
   const colInstaladas    = dataRows.filter(r => stEq(r, 'postes', 'si')).length;
-  const conectividadCount= dataRows.filter(r => stEq(r, 'conect', 'si')).length;
+  // Conectividad "instalada" = conect='si' Y no está vandalizada. Si el motivo es
+  // 'vandalizado' el tendido no se considera operativo → cuenta como 0.
+  const conectividadCount= dataRows.filter(r => stEq(r, 'conect', 'si') && !stEq(r, 'motivoConect', 'vandalizado')).length;
   const qaAprobados      = dataRows.filter(r => stEq(r, 'qaEstado', 'con')).length;
   // Dispositivos / cámaras "instaladas" = puntos con estadoConect = 'con' (En servicio)
   const camInstaladas    = k.total
@@ -1573,7 +1575,9 @@ function updateMapFromRows(dataRows, keys) {
     // Estado en el portal Control de avance (fuente de verdad); si no hay dato,
     // caemos al valor original del Excel para retro-compatibilidad.
     const st = (window.SERVER_STATUS || {})[idStr];
-    const portalConect      = st && st.conect       && st.conect.value === 'si';
+    // Conectividad "instalada" solo si conect='si' Y no está vandalizada.
+    const portalConect = st && st.conect && st.conect.value === 'si'
+                          && !(st.motivoConect && st.motivoConect.value === 'vandalizado');
     const portalEnServicio  = st && st.estadoConect && st.estadoConect.value === 'con';
     const portalGabinete    = st && st.gabineteEstado && st.gabineteEstado.value === 'si';
     // Si el portal definió ISP (incluso vacío = "ISP quitado"), manda sobre el Excel.
