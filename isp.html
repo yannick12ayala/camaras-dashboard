@@ -286,7 +286,16 @@ td.id .caret{display:inline-block; margin-left:4px; color:var(--muted); font-siz
 td.id.open .caret{transform:rotate(90deg); color:var(--accent)}
 
 /* Fila expandida con el historial */
-tr.history-row td{background:var(--surf); padding:14px 18px; border-bottom:1px solid var(--line)}
+tr.history-row td{
+  background:var(--surf); padding:14px 18px; border-bottom:1px solid var(--line);
+  /* La tabla principal desborda horizontalmente por sus muchas columnas; hacemos que
+     el contenido del historial se quede pegado al borde izquierdo del viewport
+     visible del scroll, en vez de correrse a la derecha con las columnas. */
+  position: sticky; left: 0;
+  max-width: calc(100vw - 40px);
+  box-sizing: border-box;
+}
+tr.history-row table{width:100%!important}
 tr.history-row .h-title{font-weight:600; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px}
 tr.history-row .h-empty{color:var(--muted); font-size:12.5px; padding:6px 0}
 tr.history-row table{border-collapse:collapse; font-size:12.5px}
