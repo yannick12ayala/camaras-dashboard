@@ -570,6 +570,38 @@ function statusHTML(id, col, val, edited){
   const label = val === 'si' ? 'SÍ' : 'NO';
   return `<button class="status ${val}${edited?' edited':''}" data-id="${id}" data-col="${col}" title="Clic para cambiar a ${val==='si'?'NO':'SÍ'}"><span class="dot"></span>${label}</button>`;
 }
+// Postes: persistente en el server (SERVER_STATUS[id].postes = 'si' | 'no').
+function getPostes(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
+  return s && s.value ? s.value : 'no';
+}
+function stPostesCell(id) {
+  const val = getPostes(id); // 'si' | 'no'
+  const label = val === 'si' ? 'SÍ' : 'NO';
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
+  const tip = s ? (label + ' — por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+                : ('Clic para marcar ' + (val === 'si' ? 'NO' : 'SÍ'));
+  return `<td class="status-col"><button class="status ${val}" data-postes-id="${id}" title="${tip}"><span class="dot"></span>${label}</button></td>`;
+}
+async function togglePostes(id) {
+  const cur = getPostes(id);
+  const nxt = cur === 'si' ? 'no' : 'si';
+  try {
+    const resp = await fetch('/api/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'postes', value: nxt, cam: (DATA.find(r => r.id === id) || null) }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].postes = { value: nxt, by: '(vos)', at: new Date().toISOString() };
+    const btn = document.querySelector('[data-postes-id="' + CSS.escape(id) + '"]');
+    if (btn) { const td = btn.closest('td'); if (td) td.outerHTML = stPostesCell(id); }
+  } catch (err) {
+    alert('No se pudo guardar el estado de Postes: ' + err.message);
+  }
+}
 // Estado de conectividad (persistente en el server, compartido entre todos)
 function getEstado(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].estadoConect;
@@ -955,7 +987,7 @@ function render(){
         <div>${coordText}</div>
         <div style="margin-top:5px">${gmap}</div>
       </td>
-      ${stCell('postes')}
+      ${stPostesCell(r.id)}
       ${stGabineteCell(r.id)}
       ${stEnergizadoCell(r.id)}
       ${gabNumCell}
@@ -1652,6 +1684,10 @@ document.addEventListener('click', async (e) => {
     wrap.appendChild(menu);
     return;
   }
+
+  // ── Toggle Postes (persistente en el server) ──
+  const postesId = btn.dataset.postesId;
+  if (postesId) { togglePostes(postesId); return; }
 
   // ── Caso especial: QA — mismo menú, mismos efectos que Instalación de cámara ──
   const qaId = btn.dataset.qaId;

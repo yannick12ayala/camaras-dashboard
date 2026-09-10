@@ -566,6 +566,30 @@ const server = http.createServer(async (req, res) => {
       delete DB.users[name]; saveUsers();
       return json(res, 200, { ok: true });
     }
+    // Vaciar todos los datos operativos del portal Control de avance:
+    // statuses.json, status_log.jsonl, photos/{id}/*. NO toca usuarios ni el Excel.
+    if (m === 'POST' && url === '/api/admin/wipe-portal') {
+      const removed = { statuses: false, log: false, photos: 0 };
+      try {
+        if (fs.existsSync(STATUS_FILE)) { fs.unlinkSync(STATUS_FILE); removed.statuses = true; }
+        if (fs.existsSync(STATUS_LOG))  { fs.unlinkSync(STATUS_LOG);  removed.log = true; }
+        if (fs.existsSync(PHOTOS_DIR)) {
+          const rmrf = (dir) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const p = path.join(dir, entry.name);
+              if (entry.isDirectory()) { rmrf(p); fs.rmdirSync(p); }
+              else { fs.unlinkSync(p); removed.photos++; }
+            }
+          };
+          rmrf(PHOTOS_DIR);
+        }
+        console.log('[wipe-portal] por', sess.username, '·', JSON.stringify(removed));
+        return json(res, 200, { ok: true, removed });
+      } catch (e) {
+        console.log('[wipe-portal] error:', e.message);
+        return json(res, 500, { error: e.message });
+      }
+    }
     return json(res, 404, { error: 'No encontrado' });
   }
 
@@ -610,6 +634,8 @@ const server = http.createServer(async (req, res) => {
       // de cámara"; dispara los mismos efectos automáticos sobre gabinete/energizado/motivoConect.
       qaEstado: ['con', 'sin'],
       qaMotivo: ['en_servicio', 'onu_alarmada', 'vandalizado', 'fibra_cortada', 'falla_enrutamiento', ''],
+      // Poste instalado (fue localStorage, ahora persistente en server para que el dashboard lo cuente)
+      postes: ['si', 'no', ''],
     };
     const freeText = { numServicio: 60, cantidadMB: 20, idDispositivo: 60, observacion: 500 }; // { campo: maxLen }
     // Lote: opciones fijas del 1 al 10 (mas '' para "sin asignar").

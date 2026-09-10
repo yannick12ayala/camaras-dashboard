@@ -867,30 +867,21 @@ function processRows(rows) {
     if (mb && mb !== 0) { const key = mb+' MB'; mbDist[key] = (mbDist[key]||0)+1; }
   });
 
-  // ISP
-  const SSisp = window.SERVER_STATUS || {};
+  // ISP — todos los conteos vienen del portal Control de avance (SERVER_STATUS).
   const ispData = {};
-  const isDoneVal = v => v && v !== 0 && String(v).trim() !== '' && String(v).trim() !== '0';
   dataRows.forEach(r => {
     const isp = k.isp && r[k.isp] ? String(r[k.isp]).trim().toUpperCase() : null;
     if (!isp || isp === '0' || isp === '') return;
     if (!ispData[isp]) ispData[isp] = { total: 0, factibles: 0, conectadas: 0, conServicio: 0, qaAprobados: 0 };
     ispData[isp].total += 1;
-    // Factible = poste (columna) + gabinete instalados. Es el "techo" hoy
-    // para que el ISP pueda instalar conectividad.
-    const gabOk = k.instGab   ? isDoneVal(r[k.instGab])   : false;
-    const colOk = k.estadoCol ? isDoneVal(r[k.estadoCol]) : false;
-    if (gabOk && colOk) ispData[isp].factibles += 1;
-    if (k.conectividad && n(r[k.conectividad]) === 1) ispData[isp].conectadas += 1;
-    // Con servicio = viene del portal ISP (estadoConect === 'con')
-    const idStr = String(r[Object.keys(r)[0]]||'').replace('.0','');
-    if (SSisp[idStr] && SSisp[idStr].estadoConect && SSisp[idStr].estadoConect.value === 'con') {
-      ispData[isp].conServicio += 1;
-    }
-    // QA aprobado (validado por control de avance, valida cómo dejó el servicio el ISP)
-    if (SSisp[idStr] && SSisp[idStr].qaEstado && SSisp[idStr].qaEstado.value === 'con') {
-      ispData[isp].qaAprobados += 1;
-    }
+    // Factible = poste + gabinete instalados (ambos SÍ en el portal).
+    if (stEq(r, 'postes', 'si') && stEq(r, 'gabineteEstado', 'si')) ispData[isp].factibles += 1;
+    // Conectividad ISP tendida = conect === 'si' en el portal.
+    if (stEq(r, 'conect', 'si')) ispData[isp].conectadas += 1;
+    // Con servicio = estadoConect === 'con'.
+    if (stEq(r, 'estadoConect', 'con')) ispData[isp].conServicio += 1;
+    // QA aprobado.
+    if (stEq(r, 'qaEstado', 'con')) ispData[isp].qaAprobados += 1;
   });
 
   // Relevamiento
@@ -898,29 +889,23 @@ function processRows(rows) {
   const relevados = k.relevado ? dataRows.filter(r => n(r[k.relevado]) === 1).length : 0;
   const noRelevados = totalPuntos - relevados;
 
-  // Progreso de instalación: para cada etapa, cuenta cuántas UNIDADES están
-  // instaladas (suma la cantidad de gabinetes/columnas/cámaras del punto cuando
-  // ese estado está marcado). Sirve para números tipo "12 de 696 instaladas".
-  const isDone = v => v && v !== 0 && String(v).trim() !== '' && String(v).trim() !== '0';
-  const instGabCount = k.instGab ? dataRows.filter(r => isDone(r[k.instGab])).length : 0;
-  const camInstaladas = (k.estadoCam && k.total)
-    ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCam]) ? n(r[k.total]) : 0), 0) : 0;
-  const colInstaladas = (k.estadoCol && k.col)
-    ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCol]) ? n(r[k.col]) : 0), 0) : 0;
-  // Conectividad instalada = puntos con "Estado de Conectividadad" = 1
-  const conectividadCount = k.conectividad
-    ? dataRows.filter(r => n(r[k.conectividad]) === 1).length : 0;
-  // QA aprobados = puntos con SERVER_STATUS.qaEstado === 'con'
-  // (Se completa desde el portal Control de avance con las opciones de motivo QA.)
-  const SSqa = window.SERVER_STATUS || {};
-  const qaAprobados = dataRows.filter(r => {
-    const id = String(r[Object.keys(r)[0]]||'').replace('.0','');
-    const st = SSqa[id] && SSqa[id].qaEstado;
-    return st && st.value === 'con';
-  }).length;
-  // Instalados por tipo de cámara (usa "Estado Instalación Cámara" = 1)
-  const sumIfInst = colKey => (k.estadoCam && colKey)
-    ? dataRows.reduce((s, r) => s + (isDone(r[k.estadoCam]) ? n(r[colKey]) : 0), 0) : 0;
+  // Todos los contadores operativos leen desde SERVER_STATUS (portal Control de avance).
+  // Cuando ese estado no fue cargado aún, la métrica queda en 0.
+  const SS = window.SERVER_STATUS || {};
+  const idOf = r => String(r[Object.keys(r)[0]]||'').replace('.0','');
+  const stEq = (r, field, value) => {
+    const st = SS[idOf(r)];
+    return st && st[field] && st[field].value === value;
+  };
+  const instGabCount     = dataRows.filter(r => stEq(r, 'gabineteEstado', 'si')).length;
+  const colInstaladas    = dataRows.filter(r => stEq(r, 'postes', 'si')).length;
+  const conectividadCount= dataRows.filter(r => stEq(r, 'conect', 'si')).length;
+  const qaAprobados      = dataRows.filter(r => stEq(r, 'qaEstado', 'con')).length;
+  // Dispositivos / cámaras "instaladas" = puntos con estadoConect = 'con' (En servicio)
+  const camInstaladas    = k.total
+    ? dataRows.reduce((s, r) => s + (stEq(r,'estadoConect','con') ? n(r[k.total]) : 0), 0) : 0;
+  const sumIfInst = colKey => colKey
+    ? dataRows.reduce((s, r) => s + (stEq(r,'estadoConect','con') ? n(r[colKey]) : 0), 0) : 0;
   const fijasInst      = sumIfInst(k.fijas);
   const lprInst        = sumIfInst(k.lpr);
   const domosInst      = sumIfInst(k.domos);
