@@ -636,6 +636,8 @@ const server = http.createServer(async (req, res) => {
       qaMotivo: ['en_servicio', 'onu_alarmada', 'vandalizado', 'fibra_cortada', 'falla_enrutamiento', ''],
       // Poste instalado (fue localStorage, ahora persistente en server para que el dashboard lo cuente)
       postes: ['si', 'no', ''],
+      // ISP asignado al punto (override del valor original del Excel)
+      isp: ['', 'METROTEL', 'F2H', 'TELVISO', 'BIBOP'],
     };
     const freeText = { numServicio: 60, cantidadMB: 20, idDispositivo: 60, observacion: 500 }; // { campo: maxLen }
     // Lote: opciones fijas del 1 al 10 (mas '' para "sin asignar").

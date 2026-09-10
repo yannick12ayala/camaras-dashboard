@@ -312,14 +312,15 @@ tr.history-row .h-time{font-family:'JetBrains Mono',monospace; color:var(--ink-2
 tr.history-row .h-by{color:var(--ink)}
 
 /* Columna N° de servicio (input editable) */
-td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notify-col, td.lote-col{padding:6px 8px}
-.lote-input{
+td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notify-col, td.lote-col, td.isp-col{padding:6px 8px}
+.lote-input, .isp-input{
   padding:5px 8px; border:1px solid var(--line); border-radius:5px;
   background:var(--bg); color:var(--ink); font:inherit; font-size:12px;
   outline:none; cursor:pointer; min-width:110px;
 }
-.lote-input:focus{border-color:var(--accent); background:var(--surf)}
-.lote-input:disabled{opacity:.55; cursor:wait}
+.isp-input{min-width:100px; font-weight:600}
+.lote-input:focus, .isp-input:focus{border-color:var(--accent); background:var(--surf)}
+.lote-input:disabled, .isp-input:disabled{opacity:.55; cursor:wait}
 .notify-btn{
   display:inline-flex; align-items:center; gap:6px;
   padding:7px 12px; border:1px solid #f5a623;
@@ -633,6 +634,27 @@ function numServicioCell(id) {
   return '<td class="num-servicio"><input class="num-servicio-input" data-num-id="' + id +
          '" value="' + esc + '" placeholder="—" title="' + tip + '" maxlength="60"></td>';
 }
+// ISP asignado al punto: select con las 4 opciones. Override del valor del Excel.
+const ISPS = ['METROTEL', 'F2H', 'TELVISO', 'BIBOP'];
+function getIspAsignado(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].isp;
+  if (s && s.value) return String(s.value);
+  const row = DATA.find(r => r.id === id);
+  return row && row.isp ? String(row.isp).trim().toUpperCase() : '';
+}
+function ispCell(id) {
+  const val = getIspAsignado(id);
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].isp;
+  const tip = s ? ('Asignado por ' + s.by + ' el ' + new Date(s.at).toLocaleString('es-AR'))
+                : 'Elegí a qué ISP pertenece este punto';
+  const opts = ['<option value="">—</option>']
+    .concat(ISPS.map(i => '<option value="' + i + '"' + (i === val ? ' selected' : '') + '>' + i + '</option>'))
+    .join('');
+  return '<td class="isp-col">' +
+         '<select class="isp-input" data-isp-id="' + id + '" title="' + tip + '">' + opts + '</select>' +
+         '</td>';
+}
+
 // Lote de instalación: select con opciones fijas del 1 al 10.
 const LOTES = ['Lote 1','Lote 2','Lote 3','Lote 4','Lote 5','Lote 6','Lote 7','Lote 8','Lote 9','Lote 10'];
 function getLote(id) {
@@ -1003,7 +1025,7 @@ function render(){
       ${stGabineteCell(r.id)}
       ${stEnergizadoCell(r.id)}
       ${gabNumCell}
-      <td class="isp">${r.isp || '—'}</td>
+      ${ispCell(r.id)}
       ${loteCell(r.id)}
       ${stConectCell(r.id)}
       ${numServicioCell(r.id)}
@@ -1080,6 +1102,7 @@ async function toggleHistoryRow(idTd) {
       qaMotivo:         'QA Motivo',
       observacion:      'Observación',
       lote:             'Lote',
+      isp:              'ISP',
     };
     const rowData = DATA.find(r => r.id === id);
     const ispDelPunto = rowData ? rowData.isp : '';
@@ -1169,6 +1192,40 @@ document.addEventListener('keydown', (e) => {
     }
     const inp = e.target.closest && e.target.closest('.num-servicio-input, .cantidad-mb-input, .id-dispositivo-input');
     if (inp) { inp.blur(); }
+  }
+});
+
+// ISP asignado: guardar al cambiar el <select>. Repinta la celda y el select
+// del Lote no se toca. El dashboard toma este valor al recargar.
+document.addEventListener('change', async (e) => {
+  const sel = e.target.closest && e.target.closest('.isp-input');
+  if (!sel) return;
+  const id = sel.dataset.ispId;
+  if (!id) return;
+  const value = sel.value;
+  const prev = getIspAsignado(id);
+  if (value === prev) return;
+  sel.disabled = true;
+  try {
+    const resp = await fetch('/api/status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, field: 'isp', value }),
+    });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    window.SERVER_STATUS = window.SERVER_STATUS || {};
+    window.SERVER_STATUS[id] = window.SERVER_STATUS[id] || {};
+    window.SERVER_STATUS[id].isp = { value, by: '(vos)', at: new Date().toISOString() };
+    // Actualizar también la data local para que otros re-renders vean el nuevo ISP
+    const row = DATA.find(r => r.id === id);
+    if (row) row.isp = value;
+    const td = sel.closest('td');
+    if (td) td.outerHTML = ispCell(id);
+  } catch (err) {
+    alert('No se pudo asignar el ISP: ' + err.message);
+    sel.value = prev;
+  } finally {
+    sel.disabled = false;
   }
 });
 
