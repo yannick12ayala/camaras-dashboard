@@ -1146,10 +1146,20 @@ async function toggleHistoryRow(idTd) {
           respCell = '<b style="color:' + color + '">' + resp + '</b>';
         }
       }
+      // Observaciones: append-only. Se muestra solo el nuevo texto, sin la
+      // transición prev → next (que sería un "hilo" que el operador no quiere).
+      let cambioHtml;
+      if (e.field === 'observacion') {
+        const txt = (e.next == null || e.next === '') ? '<span style="color:var(--muted)">(eliminada)</span>'
+                    : String(e.next).replace(/</g,'&lt;');
+        cambioHtml = '<span style="color:var(--muted);font-size:11px">' + fLabel + ':</span> "' + txt + '"';
+      } else {
+        cambioHtml = '<span style="color:var(--muted);font-size:11px">' + fLabel + ':</span> ' +
+          badge(e.prev, kind) + '<span class="h-arrow">→</span>' + badge(e.next, kind);
+      }
       return '<tr>' +
         '<td class="h-time">' + when + '</td>' +
-        '<td><span style="color:var(--muted);font-size:11px">' + fLabel + ':</span> ' +
-          badge(e.prev, kind) + '<span class="h-arrow">→</span>' + badge(e.next, kind) + '</td>' +
+        '<td>' + cambioHtml + '</td>' +
         '<td class="h-resp">' + respCell + '</td>' +
         '<td class="h-by">por <b>' + (e.by || '—') + '</b></td>' +
         '</tr>';
