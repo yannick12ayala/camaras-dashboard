@@ -285,14 +285,17 @@ td.id:hover{color:var(--accent)}
 td.id .caret{display:inline-block; margin-left:4px; color:var(--muted); font-size:9px; transition:transform .15s}
 td.id.open .caret{transform:rotate(90deg); color:var(--accent)}
 
-/* Fila expandida con el historial */
-tr.history-row td{
-  background:var(--surf); padding:14px 18px; border-bottom:1px solid var(--line);
-  /* La tabla principal desborda horizontalmente por sus muchas columnas; hacemos que
-     el contenido del historial se quede pegado al borde izquierdo del viewport
-     visible del scroll, en vez de correrse a la derecha con las columnas. */
+/* Fila expandida con el historial
+   La tabla principal desborda horizontalmente por sus muchas columnas.
+   Para que el contenido del historial se vea inmediatamente al desplegarlo
+   (sin scrollear a la derecha), envolvemos el contenido en una <div class="h-content">
+   que queda pegada al borde izquierdo del viewport del scroll y limitada al ancho visible. */
+tr.history-row td{background:var(--surf); padding:0; border-bottom:1px solid var(--line)}
+tr.history-row .h-content{
   position: sticky; left: 0;
+  width: calc(100vw - 40px);
   max-width: calc(100vw - 40px);
+  padding: 14px 18px;
   box-sizing: border-box;
 }
 tr.history-row table{width:100%!important}
@@ -1039,7 +1042,7 @@ async function toggleHistoryRow(idTd) {
   const holder = document.createElement('tr');
   holder.className = 'history-row';
   holder.dataset.historyOf = id;
-  holder.innerHTML = '<td colspan="' + colCount + '"><div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty">Cargando…</div></td>';
+  holder.innerHTML = '<td colspan="' + colCount + '"><div class="h-content"><div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty">Cargando…</div></div></td>';
   tr.after(holder);
 
   try {
@@ -1049,7 +1052,7 @@ async function toggleHistoryRow(idTd) {
     const entries = await resp.json();
     const cell = holder.firstElementChild;
     if (!entries.length) {
-      cell.innerHTML = '<div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty">Sin cambios registrados todavía.</div>';
+      cell.innerHTML = '<div class="h-content"><div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty">Sin cambios registrados todavía.</div></div>';
       return;
     }
     const badge = (v, kind) => {
@@ -1103,10 +1106,12 @@ async function toggleHistoryRow(idTd) {
         '</tr>';
     }).join('');
     cell.innerHTML =
+      '<div class="h-content">' +
       '<div class="h-title">Historial · Punto ' + id + ' <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"> · ' + entries.length + ' cambio' + (entries.length===1?'':'s') + '</span></div>' +
-      '<table><thead><tr><th>Fecha y hora</th><th>Cambio</th><th>Repara</th><th>Usuario</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      '<table><thead><tr><th>Fecha y hora</th><th>Cambio</th><th>Repara</th><th>Usuario</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '</div>';
   } catch (err) {
-    holder.firstElementChild.innerHTML = '<div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty" style="color:var(--bad)">Error: ' + err.message + '</div>';
+    holder.firstElementChild.innerHTML = '<div class="h-content"><div class="h-title">Historial · Punto ' + id + '</div><div class="h-empty" style="color:var(--bad)">Error: ' + err.message + '</div></div>';
   }
 }
 document.addEventListener('click', (e) => {
