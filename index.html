@@ -867,6 +867,15 @@ function processRows(rows) {
     if (mb && mb !== 0) { const key = mb+' MB'; mbDist[key] = (mbDist[key]||0)+1; }
   });
 
+  // Helper para leer estados del portal Control de avance. Se declara acá porque
+  // lo usan tanto el bloque ISP como los contadores globales.
+  const SS = window.SERVER_STATUS || {};
+  const idOf = r => String(r[Object.keys(r)[0]]||'').replace('.0','');
+  const stEq = (r, field, value) => {
+    const st = SS[idOf(r)];
+    return st && st[field] && st[field].value === value;
+  };
+
   // ISP — todos los conteos vienen del portal Control de avance (SERVER_STATUS).
   const ispData = {};
   dataRows.forEach(r => {
@@ -891,12 +900,6 @@ function processRows(rows) {
 
   // Todos los contadores operativos leen desde SERVER_STATUS (portal Control de avance).
   // Cuando ese estado no fue cargado aún, la métrica queda en 0.
-  const SS = window.SERVER_STATUS || {};
-  const idOf = r => String(r[Object.keys(r)[0]]||'').replace('.0','');
-  const stEq = (r, field, value) => {
-    const st = SS[idOf(r)];
-    return st && st[field] && st[field].value === value;
-  };
   const instGabCount     = dataRows.filter(r => stEq(r, 'gabineteEstado', 'si')).length;
   const colInstaladas    = dataRows.filter(r => stEq(r, 'postes', 'si')).length;
   const conectividadCount= dataRows.filter(r => stEq(r, 'conect', 'si')).length;
