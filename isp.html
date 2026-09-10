@@ -646,7 +646,8 @@ function numServicioCell(id) {
 const ISPS = ['METROTEL', 'F2H', 'TELVISO', 'BIBOP'];
 function getIspAsignado(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].isp;
-  if (s && s.value) return String(s.value);
+  // Si hay override en el server (incluso '' = ISP quitado), respetarlo.
+  if (s) return s.value ? String(s.value) : '';
   const row = DATA.find(r => r.id === id);
   return row && row.isp ? String(row.isp).trim().toUpperCase() : '';
 }

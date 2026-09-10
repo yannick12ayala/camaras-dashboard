@@ -802,8 +802,10 @@ function processRows(rows) {
     dataRows = dataRows.filter(r => {
       const idStr = String(r[idKey]||'').replace('.0','');
       const st = SS_[idStr];
-      const override = st && st.isp && st.isp.value ? String(st.isp.value).trim().toUpperCase() : null;
-      const ispVal = override || String(r[ispKey]||'').trim().toUpperCase();
+      // Override del portal manda incluso si es vacío ("ISP quitado").
+      let ispVal;
+      if (st && st.isp) ispVal = st.isp.value ? String(st.isp.value).trim().toUpperCase() : '';
+      else              ispVal = String(r[ispKey]||'').trim().toUpperCase();
       return ispVal === activeIsp;
     });
     if (!dataRows.length) { setSyncState('ok', `Sin puntos asignados a <strong>${activeIsp}</strong>`); }
@@ -885,16 +887,19 @@ function processRows(rows) {
   };
 
   // ISP — todos los conteos vienen del portal Control de avance (SERVER_STATUS).
-  // El ISP asignado puede haber sido cambiado desde el portal (override), así que
-  // primero miramos SERVER_STATUS[id].isp, y como fallback el valor del Excel.
-  const ispOverride = (r) => {
+  // El ISP asignado puede haber sido cambiado desde el portal (override).
+  // Si el override existe (incluso vacío = "sin ISP"), tiene prioridad absoluta
+  // sobre el valor del Excel. Solo si no hay override, se usa el Excel.
+  const ispResolved = (r) => {
     const st = SS[idOf(r)];
-    return st && st.isp && st.isp.value ? String(st.isp.value).trim().toUpperCase() : null;
+    if (st && st.isp) {
+      return st.isp.value ? String(st.isp.value).trim().toUpperCase() : ''; // '' = ISP quitado
+    }
+    return k.isp && r[k.isp] ? String(r[k.isp]).trim().toUpperCase() : null;
   };
   const ispData = {};
   dataRows.forEach(r => {
-    const ispExcel = k.isp && r[k.isp] ? String(r[k.isp]).trim().toUpperCase() : null;
-    const isp = ispOverride(r) || ispExcel;
+    const isp = ispResolved(r);
     if (!isp || isp === '0' || isp === '') return;
     if (!ispData[isp]) ispData[isp] = { total: 0, factibles: 0, conectadas: 0, conServicio: 0, qaAprobados: 0 };
     ispData[isp].total += 1;
@@ -1570,7 +1575,10 @@ function updateMapFromRows(dataRows, keys) {
     const portalConect      = st && st.conect       && st.conect.value === 'si';
     const portalEnServicio  = st && st.estadoConect && st.estadoConect.value === 'con';
     const portalGabinete    = st && st.gabineteEstado && st.gabineteEstado.value === 'si';
-    const portalIsp         = st && st.isp && st.isp.value ? String(st.isp.value).trim().toUpperCase() : null;
+    // Si el portal definió ISP (incluso vacío = "ISP quitado"), manda sobre el Excel.
+    let ispResolvedMap;
+    if (st && st.isp) ispResolvedMap = st.isp.value ? String(st.isp.value).trim().toUpperCase() : '';
+    else              ispResolvedMap = safe(r[keys.isp]||'');
     cams.push({
       id: idStr,
       direccion: safe(r[keys.direccion]||''),
@@ -1579,7 +1587,7 @@ function updateMapFromRows(dataRows, keys) {
       totalCamaras: safeInt(r[keys.total]),
       fijas: safeInt(r[keys.fijas]),
       lpr: safeInt(r[keys.lpr]),
-      isp: portalIsp || safe(r[keys.isp]||''),
+      isp: ispResolvedMap,
       conectividad: portalConect ? 1 : (st ? 0 : safeInt(r[keys.conectividad])),
       estadoCam:    portalEnServicio ? 1 : (st ? 0 : safeInt(r[keys.estadoCam])),
       relevado: safeInt(r[keys.relevado]),
