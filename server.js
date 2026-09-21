@@ -521,8 +521,12 @@ async function notifyChangesSummary({ id, cam, by, entries }) {
 
 const STATIC_PUBLIC = {
   '/login':         { file: 'login.html',    type: 'text/html; charset=utf-8' },
-  '/manifest.json': { file: 'manifest.json', type: 'application/json; charset=utf-8' },
-  '/icon.png':      { file: 'icon.png',      type: 'image/png' },
+  '/manifest.json':          { file: 'manifest.json',          type: 'application/json; charset=utf-8' },
+  '/sw.js':                  { file: 'sw.js',                  type: 'application/javascript; charset=utf-8' },
+  '/icon.png':               { file: 'icon.png',               type: 'image/png' },
+  '/icon-192.png':           { file: 'icon-192.png',           type: 'image/png' },
+  '/icon-192-maskable.png':  { file: 'icon-192-maskable.png',  type: 'image/png' },
+  '/icon-512-maskable.png':  { file: 'icon-512-maskable.png',  type: 'image/png' },
 };
 
 const server = http.createServer(async (req, res) => {

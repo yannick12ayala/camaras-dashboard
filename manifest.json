@@ -1,15 +1,25 @@
 {
-  "name": "Cámaras V",
+  "name": "Cámaras V · Control de avance",
   "short_name": "Cámaras V",
-  "icons": [
-    {
-      "src": "icon.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ],
-  "start_url": "/",
+  "description": "Portal de seguimiento de instalación de cámaras de seguridad — Municipalidad de Pilar. Herramienta para técnicos de campo: registrar postes, gabinetes, conectividad, QA, observaciones y fotos por punto.",
+  "id": "/",
+  "start_url": "/isp",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#0f1117",
-  "theme_color": "#0f1117"
+  "theme_color": "#0f1117",
+  "lang": "es-AR",
+  "dir": "ltr",
+  "categories": ["utilities", "productivity", "business"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Portal técnicos (Control de avance)", "url": "/isp", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Dashboard", "url": "/", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
 }
