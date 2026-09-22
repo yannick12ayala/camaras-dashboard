@@ -497,14 +497,42 @@ const fmt = (n) => new Intl.NumberFormat('es-AR').format(n);
 // DMS -> decimal
 function parseDMS(s){
   if(!s) return null;
-  const m = /(\d+)\s*°\s*(\d+)\s*['’]\s*([\d.]+)\s*["”]?\s*([NSEOW])/i.exec(s);
-  if(!m) return null;
-  let d = parseInt(m[1],10) + parseInt(m[2],10)/60 + parseFloat(m[3])/3600;
-  const h = m[4].toUpperCase();
-  if(h==='S'||h==='O'||h==='W') d = -d;
-  return d;
+  const raw = String(s).trim();
+  // Formato DMS (34°24'53.76"S)
+  const m = /(\d+)\s*°\s*(\d+)\s*['’]\s*([\d.]+)\s*["”]?\s*([NSEOW])/i.exec(raw);
+  if(m){
+    let d = parseInt(m[1],10) + parseInt(m[2],10)/60 + parseFloat(m[3])/3600;
+    const h = m[4].toUpperCase();
+    if(h==='S'||h==='O'||h==='W') d = -d;
+    return d;
+  }
+  // Decimal / entero sin punto (ej: -34.457421, -34,457421 o -34457421)
+  let num = raw.replace(/\s+/g,'').replace(',', '.');
+  if(/^-?\d+(\.\d+)?$/.test(num)){
+    let v = parseFloat(num);
+    if(!isFinite(v) || v === 0) return null;
+    // Escala si viene como entero sin punto (-34457421 → -34.457421)
+    while(Math.abs(v) > 180) v = v / 10;
+    return v;
+  }
+  return null;
 }
-function fmtDMS(s){ return (s||'').replace(/\s+/g,' ').trim(); }
+function fmtDMS(s){
+  if(!s) return '';
+  const str = String(s).trim();
+  // Si es DMS o decimal chico, mostrarlo tal cual (normalizando espacios).
+  if(/°/.test(str) || Math.abs(parseFloat(str.replace(',','.'))) <= 180){
+    return str.replace(/\s+/g,' ');
+  }
+  // Si es entero compactado (-34457421), lo mostramos como decimal (-34.457421).
+  const n = parseFloat(str.replace(',','.'));
+  if(isFinite(n)){
+    let v = n;
+    while(Math.abs(v) > 180) v = v/10;
+    return v.toFixed(6);
+  }
+  return str.replace(/\s+/g,' ');
+}
 
 const TYPES = [
   {k:'fijas', field:'fijas',  label:'Fija',                cls:'fijas'},
