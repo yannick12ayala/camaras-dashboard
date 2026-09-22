@@ -144,6 +144,14 @@ td.coord{font-family:'JetBrains Mono',monospace; font-size:11.5px; white-space:n
 .gmap:hover{background:color-mix(in oklab, var(--map) 20%, var(--map-soft)); transform:translateY(-1px)}
 .gmap svg{width:12px; height:12px}
 .gmap.dis{opacity:.4; pointer-events:none}
+.coord-btns{display:flex; gap:6px; flex-wrap:wrap}
+/* Botón Google Earth - color celeste/azul terrenal para diferenciar del Maps */
+.gmap.gearth{color:#0891b2; background:#cffafe; border-color:rgba(8,145,178,0.35)}
+.gmap.gearth:hover{background:#a5f3fc}
+:root:not([data-theme="light"]) .gmap.gearth{color:#22d3ee; background:rgba(34,211,238,0.10); border-color:rgba(34,211,238,0.35)}
+:root:not([data-theme="light"]) .gmap.gearth:hover{background:rgba(34,211,238,0.20)}
+:root[data-theme="dark"] .gmap.gearth{color:#22d3ee; background:rgba(34,211,238,0.10); border-color:rgba(34,211,238,0.35)}
+:root[data-theme="dark"] .gmap.gearth:hover{background:rgba(34,211,238,0.20)}
 
 .pdf-btn{
   display:inline-flex; align-items:center; gap:6px;
@@ -573,8 +581,19 @@ if(_cleaned) saveOverrides(overrides);
 
 function initFromData(){
 for(const r of DATA){
-  r.lat = parseDMS(r.coord);
-  r.lon = parseDMS(r.coord2);
+  // Nuevo formato: la columna AJ ahora trae "lat, lon" combinado en una sola celda.
+  // Detectamos el par y lo separamos; si no, caemos al parser tradicional (DMS o decimal simple).
+  const combo = String(r.coord || '').trim();
+  const pair = combo.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (pair) {
+    r.lat = parseFloat(pair[1]);
+    r.lon = parseFloat(pair[2]);
+    r.coord  = pair[1];
+    r.coord2 = pair[2];
+  } else {
+    r.lat = parseDMS(r.coord);
+    r.lon = parseDMS(r.coord2);
+  }
   r.tipos = TYPES.filter(t => (r[t.field]||0) > 0);
   r._seed = seed(r);
   // effective value = override if present else seed
@@ -629,6 +648,7 @@ $('resetBtn').addEventListener('click', () => {
 });
 
 const iconMap = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+const iconEarth = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
 const iconPdf = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg>`;
 
 function statusHTML(id, col, val, edited){
@@ -1075,10 +1095,15 @@ function render(){
 
     const hasCoord = r.lat != null && r.lon != null;
     const gmapUrl = hasCoord ? `https://www.google.com/maps?q=${r.lat.toFixed(6)},${r.lon.toFixed(6)}` : '#';
+    // Google Earth Web (misma cuenta, 3D, misma nube de KMZ): usa /web/@lat,lon,alt,zoom
+    const gearthUrl = hasCoord ? `https://earth.google.com/web/@${r.lat.toFixed(6)},${r.lon.toFixed(6)},0a,150d,35y,0h,0t,0r` : '#';
     const gmap = hasCoord
-      ? `<a class="gmap" href="${gmapUrl}" target="_blank" rel="noopener" title="Abrir en Google Maps">${iconMap} Ver en mapa</a>`
+      ? `<a class="gmap" href="${gmapUrl}" target="_blank" rel="noopener" title="Abrir en Google Maps">${iconMap} Maps</a>`
       : `<span class="gmap dis">${iconMap} Sin coord.</span>`;
-    const coordText = hasCoord ? `${fmtDMS(r.coord)} · ${fmtDMS(r.coord2)}` : '—';
+    const gearth = hasCoord
+      ? `<a class="gmap gearth" href="${gearthUrl}" target="_blank" rel="noopener" title="Abrir en Google Earth (KMZ 3D)">${iconEarth} Earth</a>`
+      : '';
+    const coordText = hasCoord ? `${r.lat.toFixed(6)}, ${r.lon.toFixed(6)}` : '—';
 
     const pdf = r.pdf
       ? `<a class="pdf-btn" href="${r.pdf}" target="_blank" rel="noopener" title="Abrir plano PDF del punto ${r.id}">${iconPdf} PDF</a>`
@@ -1100,7 +1125,7 @@ function render(){
       ${cantidadMBCell(r.id)}
       <td class="coord">
         <div>${coordText}</div>
-        <div style="margin-top:5px">${gmap}</div>
+        <div class="coord-btns" style="margin-top:5px">${gmap}${gearth}</div>
       </td>
       ${stPostesCell(r.id)}
       ${stGabineteCell(r.id)}
