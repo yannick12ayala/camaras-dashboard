@@ -677,6 +677,11 @@ const server = http.createServer(async (req, res) => {
   if (m === 'GET' && url === '/api/status') {
     return json(res, 200, loadStatuses());
   }
+  // Control de avance: solo los admin pueden modificar datos (estados, fotos, notificaciones).
+  if (m === 'POST' && (url === '/api/status' || url === '/api/status/notify' || url === '/api/photo') && !sess.isAdmin) {
+    return json(res, 403, { error: 'Solo un administrador puede modificar el Control de avance' });
+  }
+
   if (m === 'POST' && url === '/api/status') {
     const body = await readJson(req);
     const id = String(body.id || '').trim();
