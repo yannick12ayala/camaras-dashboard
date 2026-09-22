@@ -86,8 +86,11 @@
       const tipo = u.isAdmin ? '<span class="tag admin">admin</span>' : 'usuario';
       const estado = u.pending ? '<span class="tag pend">pendiente</span>' : '<span class="tag act">activo</span>';
       let acciones = '';
-      if (!u.isAdmin) {
-        acciones = '<button class="act-btn" data-reset="'+u.user+'">Resetear clave</button>'
+      if (!u.isMain) {
+        acciones = (u.isAdmin
+                     ? '<button class="act-btn" data-setadmin="'+u.user+'" data-val="0">Quitar admin</button>'
+                     : '<button class="act-btn" data-setadmin="'+u.user+'" data-val="1">Hacer admin</button>')
+                 + '<button class="act-btn" data-reset="'+u.user+'">Resetear clave</button>'
                  + '<button class="act-btn del" data-del="'+u.user+'">Borrar</button>';
       }
       tr.innerHTML = '<td><b>'+u.user+'</b></td><td>'+tipo+'</td><td>'+estado+'</td><td style="text-align:right">'+acciones+'</td>';
@@ -107,6 +110,14 @@
   document.addEventListener('click', async e => {
     const reset = e.target.getAttribute('data-reset');
     const del = e.target.getAttribute('data-del');
+    const setAdm = e.target.getAttribute('data-setadmin');
+    if (setAdm){
+      const makeAdmin = e.target.getAttribute('data-val') === '1';
+      if(!confirm((makeAdmin ? '¿Dar permiso de admin a "' : '¿Quitar el permiso de admin a "') + setAdm + '"?'))return;
+      const d = await (await fetch('/api/admin/set-admin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:setAdm,isAdmin:makeAdmin})})).json();
+      if(d.ok) load(); else alert(d.error||'Error');
+      return;
+    }
     if (reset){
       if(!confirm('¿Resetear la contraseña de "'+reset+'"? Se le dará un nuevo código para que vuelva a elegir clave.'))return;
       const d = await (await fetch('/api/admin/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:reset})})).json();

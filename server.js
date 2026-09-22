@@ -597,8 +597,18 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith('/api/admin/')) {
     if (!sess || !sess.isAdmin) return json(res, 403, { error: 'Solo el administrador' });
     if (m === 'GET' && url === '/api/admin/users') {
-      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, pending: !!DB.users[name].pending }));
+      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, pending: !!DB.users[name].pending, isMain: name === ADMIN_USER }));
       return json(res, 200, { users });
+    }
+    if (m === 'POST' && url === '/api/admin/set-admin') {
+      const body = await readJson(req);
+      const name = norm(body.user);
+      if (name === ADMIN_USER) return json(res, 400, { error: 'El admin principal no se puede modificar' });
+      const u = DB.users[name];
+      if (!u) return json(res, 404, { error: 'No existe' });
+      u.isAdmin = !!body.isAdmin;
+      saveUsers();
+      return json(res, 200, { ok: true, user: name, isAdmin: u.isAdmin });
     }
     if (m === 'POST' && url === '/api/admin/create') {
       const name = norm((await readJson(req)).user);
