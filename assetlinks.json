@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "ar.gov.pilar.camaraseg.twa",
+        "sha256_cert_fingerprints": ["26:9C:D3:D7:DB:78:98:30:D9:19:9B:AF:DA:FD:FB:E5:BA:1E:D2:83:8F:95:EB:E2:D4:29:0C:E2:1F:7C:34:84"]
+      }
+    }]

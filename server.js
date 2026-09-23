@@ -523,6 +523,8 @@ const STATIC_PUBLIC = {
   '/login':         { file: 'login.html',    type: 'text/html; charset=utf-8' },
   '/manifest.json':          { file: 'manifest.json',          type: 'application/json; charset=utf-8' },
   '/sw.js':                  { file: 'sw.js',                  type: 'application/javascript; charset=utf-8' },
+  // Digital Asset Links: permite que la APK (TWA) abra a pantalla completa sin barra de navegador
+  '/.well-known/assetlinks.json': { file: 'assetlinks.json',  type: 'application/json; charset=utf-8' },
   '/icon.png':               { file: 'icon.png',               type: 'image/png' },
   '/icon-192.png':           { file: 'icon-192.png',           type: 'image/png' },
   '/icon-192-maskable.png':  { file: 'icon-192-maskable.png',  type: 'image/png' },
