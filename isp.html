@@ -2044,6 +2044,7 @@ document.addEventListener('click', async (e) => {
 });
 
 render();
+window.renderTable = render; // expuesto para el refresco automático
 } // fin initFromData
 
 // Theme toggle
@@ -2156,5 +2157,32 @@ async function bootstrap() {
   }
 }
 bootstrap();
+
+// Refresco automático cada 1 minuto: trae los estados del server y redibuja la tabla.
+// Se saltea si la pestaña no está visible o si el usuario está en medio de algo que el
+// redibujo interrumpiría (escribiendo en un campo, con un menú, historial o fotos abiertos).
+let _ispRefreshing = false;
+setInterval(async () => {
+  if (_ispRefreshing || document.hidden || !window.renderTable) return;
+  const ae = document.activeElement;
+  if (ae && ae.closest && ae.closest('#tbl') && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
+  if (document.querySelector('.estado-menu, tr.history-row, .foto-modal')) return;
+  _ispRefreshing = true;
+  try {
+    const resp = await fetch('/api/status', { cache: 'no-store' });
+    if (resp.status === 401) { location.href = '/login'; return; }
+    if (!resp.ok) return;
+    window.SERVER_STATUS = await resp.json();
+    // Volver a chequear: el usuario pudo haber empezado a editar durante la descarga
+    const ae2 = document.activeElement;
+    if (ae2 && ae2.closest && ae2.closest('#tbl') && /^(INPUT|TEXTAREA|SELECT)$/.test(ae2.tagName)) return;
+    if (document.querySelector('.estado-menu, tr.history-row, .foto-modal')) return;
+    window.renderTable();
+  } catch (e) {
+    // sin conexión: se reintenta en el próximo minuto
+  } finally {
+    _ispRefreshing = false;
+  }
+}, 60 * 1000);
 
 </script>

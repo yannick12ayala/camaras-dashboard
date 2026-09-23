@@ -740,9 +740,13 @@ function setLoading(on, text) {
   if (text) document.getElementById('loadingText').textContent = text;
 }
 
-async function loadData() {
-  setLoading(true, 'Cargando datos…');
-  setSyncState('loading', 'Conectando con el servidor de datos…');
+async function loadData(opts) {
+  // silent: refresco automático — sin pantalla de "Cargando" ni mensaje de conexión
+  const silent = !!(opts && opts.silent);
+  if (!silent) {
+    setLoading(true, 'Cargando datos…');
+    setSyncState('loading', 'Conectando con el servidor de datos…');
+  }
   try {
     const resp = await fetch(EXCEL_URL, { cache: 'no-store' });
     if (resp.status === 401) { location.href = '/login'; return; }
@@ -1513,12 +1517,17 @@ function buildPopup(cam) {
 }
 
 function initMap(cameras) {
-  if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+  // Al refrescar, conservar la vista (centro/zoom) que el usuario tenía.
+  let prevCenter = null, prevZoom = null;
+  if (mapInstance) {
+    prevCenter = mapInstance.getCenter(); prevZoom = mapInstance.getZoom();
+    mapInstance.remove(); mapInstance = null;
+  }
   allMarkers = [];
 
   mapInstance = L.map('mapContainer', {
-    center: [-34.4580, -58.9120],
-    zoom: 12,
+    center: prevCenter || [-34.4580, -58.9120],
+    zoom: prevZoom || 12,
     zoomControl: true
   });
 
@@ -1547,9 +1556,16 @@ function initMap(cameras) {
   document.querySelector('.map-filter-btn.work').textContent  = `Cámara funcionando (${workCount})`;
   document.querySelector('.map-filter-btn.ok').textContent    = `Con conectividad (${okCount})`;
   document.querySelector('.map-filter-btn.nocon').textContent = `Sin conectividad (${noConCount})`;
+
+  // Re-aplicar el filtro del mapa que estaba activo antes del refresco
+  if (window.MAP_FILTER && window.MAP_FILTER !== 'all') {
+    const btn = document.querySelector('.map-filter-btn.' + window.MAP_FILTER);
+    if (btn) filterMap(window.MAP_FILTER, btn);
+  }
 }
 
 function filterMap(type, btn) {
+  window.MAP_FILTER = type;
   document.querySelectorAll('.map-filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   allMarkers.forEach(m => {
@@ -1719,6 +1735,17 @@ function renderObservaciones(rows) {
 // ── END MAP ──────────────────────────────────────────
 
 loadData();
+
+// Refresco automático cada 1 minuto. Se saltea si la pestaña no está visible o si el
+// usuario está mirando algo que el refresco cerraría (popup del mapa, historial abierto).
+let _autoRefreshing = false;
+setInterval(async () => {
+  if (_autoRefreshing || document.hidden) return;
+  if (document.querySelector('.leaflet-popup')) return;
+  if (document.querySelector('tr.prob-history-row')) return;
+  _autoRefreshing = true;
+  try { await loadData({ silent: true }); } finally { _autoRefreshing = false; }
+}, 60 * 1000);
 
 // Filtro global por ISP: al cliquear, marca el botón activo y re-procesa las filas
 window.ACTIVE_ISP = '__ALL__';
