@@ -69,6 +69,10 @@
   .isp-filter-btn:hover { color: var(--text1); border-color: var(--border2); background: var(--surface2); }
   .isp-filter-btn.active { background: linear-gradient(135deg, #4d8ef0, #6366f1); color: #fff; border-color: transparent; box-shadow: 0 2px 8px rgba(77,142,240,.3); }
   .isp-filter-btn.active:hover { color: #fff; background: linear-gradient(135deg, #5d9ef8, #7376ff); }
+  .isp-filter:has(+ .lote-filter[style*="flex"]) { margin-bottom: 8px; }
+  .lote-filter { align-items: center; margin-top: 0; }
+  .lote-filter-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text2); margin-right: 6px; white-space: nowrap; }
+  .lote-cnt { opacity: .7; font-weight: 500; margin-left: 4px; }
   .isp-filter-btn.qa-btn { color: #f5a623; border-color: rgba(245,166,35,.4); }
   .isp-filter-btn.qa-btn:hover { color: #f5a623; border-color: #f5a623; }
   .isp-filter-btn.qa-btn.active { background: linear-gradient(135deg, #f5a623, #ff8a00); color: #1a1a1a; box-shadow: 0 2px 8px rgba(245,166,35,.4); }
@@ -515,6 +519,8 @@
     <button class="isp-filter-btn" data-isp="BIBOP">Bibop</button>
     <button class="isp-filter-btn qa-btn" data-isp="__QA__" title="Filtrar por estado de QA (aprobado vs rechazado por ISP)">🎯 QA</button>
   </div>
+  <!-- Sub-filtro por lote: se muestra al elegir un ISP -->
+  <div class="isp-filter lote-filter" id="loteFilter" style="display:none"></div>
 
   <div class="section-label">Resumen general</div>
   <!-- Fila 1 · Workflow de instalación: obra civil → conectividad → QA -->
@@ -841,8 +847,20 @@ function processRows(rows) {
         return ispVal === activeIsp;
       });
       if (!dataRows.length) { setSyncState('ok', `Sin puntos asignados a <strong>${activeIsp}</strong>`); }
+      // Sub-filtro por lote del ISP elegido (el lote se asigna en Control de avance).
+      const loteOf = r => {
+        const st = SS_[String(r[idKey]||'').replace('.0','')];
+        return st && st.lote && st.lote.value ? String(st.lote.value) : '';
+      };
+      const loteCount = {};
+      dataRows.forEach(r => { const l = loteOf(r); loteCount[l] = (loteCount[l]||0) + 1; });
+      if (window.ACTIVE_LOTE !== '__ALL__' && !(window.ACTIVE_LOTE in loteCount)) window.ACTIVE_LOTE = '__ALL__';
+      renderLoteFilter(activeIsp, loteCount, dataRows.length);
+      if (window.ACTIVE_LOTE !== '__ALL__') dataRows = dataRows.filter(r => loteOf(r) === window.ACTIVE_LOTE);
     }
   }
+  if (!activeIsp || activeIsp === '__ALL__' || activeIsp === '__QA__') renderLoteFilter(null);
+  if (!dataRows.length) return;
 
   // DEBUG - mostrar headers y valor conectividad del primer row
   const allKeys = Object.keys(dataRows[0]);
@@ -1770,6 +1788,32 @@ document.getElementById('ispFilter').addEventListener('click', (e) => {
   document.querySelectorAll('.isp-filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   window.ACTIVE_ISP = btn.dataset.isp;
+  window.ACTIVE_LOTE = '__ALL__';
+  if (window.ALL_ROWS && window.ALL_ROWS.length) {
+    destroyCharts();
+    processRows(window.ALL_ROWS);
+  }
+});
+
+// Sub-filtro por lote: aparece solo con un ISP elegido. "General" = todo el ISP.
+window.ACTIVE_LOTE = '__ALL__';
+function renderLoteFilter(isp, loteCount, total) {
+  const box = document.getElementById('loteFilter');
+  if (!isp) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const num = l => parseInt(String(l).replace(/\D/g, ''), 10) || 0;
+  const lotes = Object.keys(loteCount).filter(l => l).sort((a, b) => num(a) - num(b));
+  const btn = (val, label, cnt) =>
+    `<button class="isp-filter-btn${window.ACTIVE_LOTE === val ? ' active' : ''}" data-lote="${val}">${label} <span class="lote-cnt">${cnt}</span></button>`;
+  let html = `<span class="lote-filter-label">Lotes de ${isp}</span>` + btn('__ALL__', 'General', total);
+  lotes.forEach(l => { html += btn(l, l, loteCount[l]); });
+  if (loteCount['']) html += btn('', 'Sin lote', loteCount['']);
+  box.innerHTML = html;
+  box.style.display = 'flex';
+}
+document.getElementById('loteFilter').addEventListener('click', (e) => {
+  const btn = e.target.closest('.isp-filter-btn');
+  if (!btn) return;
+  window.ACTIVE_LOTE = btn.dataset.lote;
   if (window.ALL_ROWS && window.ALL_ROWS.length) {
     destroyCharts();
     processRows(window.ALL_ROWS);
