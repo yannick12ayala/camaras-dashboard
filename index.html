@@ -266,6 +266,7 @@
   .map-filter-btn.work.active   { background: #3ecf8e; }
   .map-filter-btn.ok.active     { background: #22d3ee; }
   .map-filter-btn.nocon.active  { background: #8b90a7; }
+  .map-filter-btn.nogab.active  { background: #a78bfa; }
   .leaflet-popup-content-wrapper {
     background: #181c27 !important;
     border: 1px solid rgba(255,255,255,0.12) !important;
@@ -527,6 +528,7 @@
       <div class="metric-label">Gabinetes</div>
       <div class="metric-value"><span class="m-done" id="mGabDone">—</span><span class="m-sep">/</span><span class="m-total" id="mGab">—</span></div>
       <div class="metric-sub" id="mGabInst">Instalados</div>
+      <div class="metric-sub" id="mGabSin" style="color:#a78bfa;margin-top:2px" hidden></div>
     </div>
     <div class="metric-card teal">
       <div class="metric-label">Conectividad</div>
@@ -615,6 +617,7 @@
       <button class="map-filter-btn work" onclick="filterMap('work',this)">Cámara funcionando</button>
       <button class="map-filter-btn ok"   onclick="filterMap('ok',this)">Con conectividad</button>
       <button class="map-filter-btn nocon" onclick="filterMap('nocon',this)">Sin conectividad</button>
+      <button class="map-filter-btn nogab" onclick="filterMap('nogab',this)">No llevan gabinete</button>
     </div>
     <div id="mapContainer"></div>
     <div class="map-legend">
@@ -956,6 +959,13 @@ function processRows(rows) {
   // 'vandalizado' el tendido no se considera operativo → cuenta como 0.
   const conectividadCount= dataRows.filter(r => stEq(r, 'conect', 'si') && !stEq(r, 'motivoConect', 'vandalizado')).length;
   const qaAprobados      = dataRows.filter(r => stEq(r, 'qaEstado', 'con')).length;
+  // Puntos que por diseño no llevan gabinete (planilla de distribución)
+  const sinGabCount      = dataRows.filter(r => stEq(r, 'sinGabinete', 'si')).length;
+  const elGabSin = document.getElementById('mGabSin');
+  if (elGabSin) {
+    elGabSin.hidden = sinGabCount === 0;
+    elGabSin.textContent = sinGabCount + (sinGabCount === 1 ? ' punto no lleva gabinete' : ' puntos no llevan gabinete');
+  }
   // Dispositivos / cámaras "instaladas" = puntos con estadoConect = 'con' (En servicio)
   const camInstaladas    = k.total
     ? dataRows.reduce((s, r) => s + (stEq(r,'estadoConect','con') ? n(r[k.total]) : 0), 0) : 0;
@@ -1483,14 +1493,14 @@ function buildPopup(cam) {
     <div class="popup-row"><span class="label">Localidad</span><span class="value">${cam.localidad}</span></div>
     <div class="popup-row"><span class="label">Cámaras</span><span class="value">${cam.totalCamaras} (${cam.fijas} fijas / ${cam.lpr} LPR)</span></div>
     <div class="popup-row"><span class="label">MB</span><span class="value">${cam.mb || '—'}</span></div>
-    <div class="popup-row"><span class="label">Gabinete</span><span class="value">${gabBadge}</span></div>
+    <div class="popup-row"><span class="label">Gabinete</span><span class="value">${cam.sinGabinete ? '<span class="popup-badge" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px dashed rgba(167,139,250,0.5)">No lleva</span>' : gabBadge}</span></div>
     <div class="popup-row"><span class="label">Cámara</span><span class="value">${camBadge}</span></div>`;
 
   if (fechaGab !== '—') rows += `<div class="popup-row"><span class="label">Fecha gabinete</span><span class="value">${fechaGab}</span></div>`;
   if (fechaCol !== '—') rows += `<div class="popup-row"><span class="label">Fecha columna</span><span class="value">${fechaCol}</span></div>`;
   if (fechaCam !== '—') rows += `<div class="popup-row"><span class="label">Fecha cámara</span><span class="value">${fechaCam}</span></div>`;
 
-  rows += `<div class="popup-row"><span class="label">ISP</span><span class="value">${cam.isp || '—'}</span></div>
+  rows += `<div class="popup-row"><span class="label">ISP</span><span class="value">${cam.isp || '—'}${cam.lote ? ' · ' + cam.lote : ''}</span></div>
     <div class="popup-row"><span class="label">Conectividad</span><span class="value">${conBadge}</span></div>`;
 
   if (cam.observaciones) rows += `<div class="popup-row"><span class="label">Obs.</span><span class="value" style="font-family:var(--font)">${cam.observaciones}</span></div>`;
@@ -1556,6 +1566,8 @@ function initMap(cameras) {
   document.querySelector('.map-filter-btn.work').textContent  = `Cámara funcionando (${workCount})`;
   document.querySelector('.map-filter-btn.ok').textContent    = `Con conectividad (${okCount})`;
   document.querySelector('.map-filter-btn.nocon').textContent = `Sin conectividad (${noConCount})`;
+  const noGabBtn = document.querySelector('.map-filter-btn.nogab');
+  if (noGabBtn) noGabBtn.textContent = `No llevan gabinete (${cameras.filter(c => c.sinGabinete).length})`;
 
   // Re-aplicar el filtro del mapa que estaba activo antes del refresco
   if (window.MAP_FILTER && window.MAP_FILTER !== 'all') {
@@ -1575,6 +1587,7 @@ function filterMap(type, btn) {
     if (type === 'work')  show = cam.estadoCam === 1;
     if (type === 'ok')    show = cam.conectividad === 1 && cam.estadoCam !== 1;
     if (type === 'nocon') show = cam.conectividad !== 1;
+    if (type === 'nogab') show = !!cam.sinGabinete;
     if (show) m.addTo(mapInstance);
     else mapInstance.removeLayer(m);
   });
@@ -1658,6 +1671,8 @@ function updateMapFromRows(dataRows, keys) {
       estadoCam:    portalEnServicio ? 1 : (st ? 0 : safeInt(r[keys.estadoCam])),
       relevado: safeInt(r[keys.relevado]),
       instGabinete: portalGabinete ? 1 : (st ? 0 : safeInt(r[keys.instGab])),
+      sinGabinete: !!(st && st.sinGabinete && st.sinGabinete.value === 'si'),
+      lote: (st && st.lote && st.lote.value) ? String(st.lote.value) : '',
       fechaGabinete: safe(r[keys.fechaGab]||''),
       fechaColumna: safe(r[keys.fechaCol]||''),
       fechaCamara: safe(r[keys.fechaCam]||''),

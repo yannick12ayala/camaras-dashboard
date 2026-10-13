@@ -536,6 +536,40 @@ const server = http.createServer(async (req, res) => {
   const m = req.method;
 
   // ── Subida de datos (secreto, sin sesión) ──
+  // Carga masiva de asignaciones (ISP / Lote / Sin gabinete) desde una planilla.
+  // Mismo secreto que /api/upload. Solo acepta esos tres campos, con valores cerrados.
+  if (m === 'POST' && url === '/api/status/bulk') {
+    if (!UPLOAD_SECRET || req.headers['x-upload-secret'] !== UPLOAD_SECRET) return json(res, 401, { error: 'Unauthorized' });
+    try {
+      const body = JSON.parse(String(await readBody(req)));
+      const by = String(body.by || 'carga masiva').slice(0, 60);
+      const items = Array.isArray(body.items) ? body.items : [];
+      const allowed = {
+        isp: ['', 'METROTEL', 'F2H', 'TELVISO', 'BIBOP'],
+        lote: ['', 'Lote 1', 'Lote 2', 'Lote 3', 'Lote 4', 'Lote 5', 'Lote 6', 'Lote 7', 'Lote 8', 'Lote 9', 'Lote 10'],
+        sinGabinete: ['si', ''],
+      };
+      const all = loadStatuses();
+      const now = new Date().toISOString();
+      let changed = 0, same = 0; const rejected = [];
+      for (const it of items) {
+        const id = String((it && it.id) || '').trim();
+        const field = String((it && it.field) || '');
+        const value = it && it.value != null ? String(it.value) : '';
+        if (!/^\d{4}$/.test(id) || !allowed[field] || !allowed[field].includes(value)) { rejected.push({ id, field, value }); continue; }
+        const cur = all[id] && all[id][field];
+        const prev = cur ? cur.value : null;
+        if (cur && prev === value) { same++; continue; }
+        all[id] = all[id] || {};
+        all[id][field] = { value, by, at: now };
+        appendLog({ ts: now, by, id, field, prev, next: value });
+        changed++;
+      }
+      saveStatuses(all);
+      return json(res, 200, { ok: true, received: items.length, changed, same, rejected });
+    } catch (e) { return json(res, 400, { error: String(e) }); }
+  }
+
   if (m === 'POST' && url === '/api/upload') {
     if (!UPLOAD_SECRET || req.headers['x-upload-secret'] !== UPLOAD_SECRET) return json(res, 401, { error: 'Unauthorized' });
     try {
@@ -714,6 +748,8 @@ const server = http.createServer(async (req, res) => {
       postes: ['si', 'no', ''],
       // ISP asignado al punto (override del valor original del Excel)
       isp: ['', 'METROTEL', 'F2H', 'TELVISO', 'BIBOP'],
+      // Punto que por diseño NO lleva gabinete (viene de la planilla de distribución)
+      sinGabinete: ['si', ''],
     };
     const freeText = { numServicio: 60, cantidadMB: 20, idDispositivo: 60, observacion: 500 }; // { campo: maxLen }
     // Lote: opciones fijas del 1 al 10 (mas '' para "sin asignar").
