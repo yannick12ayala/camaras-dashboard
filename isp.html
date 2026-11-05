@@ -479,6 +479,25 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
       <option value="BIBOP">Bibop</option>
       <option value="__SIN__">Sin ISP</option>
     </select>
+    <select id="fPostes" aria-label="Postes">
+      <option value="">Postes: todos</option>
+      <option value="lleva">Lleva postes</option>
+      <option value="uno">Lleva 1 poste</option>
+      <option value="dos">Lleva 2 postes</option>
+      <option value="inst">Postes instalados (SÍ)</option>
+      <option value="noinst">Postes NO instalados</option>
+      <option value="pend">Postes pendientes</option>
+      <option value="nolleva">No lleva postes</option>
+    </select>
+    <select id="fGab" aria-label="Gabinete">
+      <option value="">Gabinete: todos</option>
+      <option value="lleva">Lleva gabinete</option>
+      <option value="inst">Gabinete instalado (SÍ)</option>
+      <option value="noinst">Gabinete NO instalado</option>
+      <option value="pend">Gabinete pendiente</option>
+      <option value="vand">Gabinete vandalizado</option>
+      <option value="nolleva">No lleva gabinete</option>
+    </select>
     <select id="fProblema" aria-label="Estado / Problema">
       <option value="">Cualquier estado</option>
       <optgroup label="Estado de conectividad">
@@ -696,10 +715,13 @@ $('q').addEventListener('input', render);
 if ($('fLote'))     $('fLote').addEventListener('change', render);
 if ($('fISP'))      $('fISP').addEventListener('change', render);
 if ($('fProblema')) $('fProblema').addEventListener('change', render);
+$('fPostes').addEventListener('change', render);
+$('fGab').addEventListener('change', render);
 $('clear').addEventListener('click', () => {
   $('q').value='';
   if ($('fLote'))     $('fLote').value = '';
   if ($('fISP'))      $('fISP').value  = '';
+  $('fPostes').value = ''; $('fGab').value = '';
   if ($('fProblema')) $('fProblema').value = '';
   render();
 });
@@ -1102,6 +1124,22 @@ function render(){
       const rispU = (sIsp ? String(sIsp.value || '') : String(r.isp || '')).trim().toUpperCase();
       if(flISP === '__SIN__' ? rispU !== '' : rispU !== flISP) return false;
     }
+    // Filtro por postes (cantidad asignada + estado en el panel)
+    const flPos = $('fPostes').value;
+    if(flPos){
+      const c = r.cols || 0, p = val(r.id, 'postes');
+      const ok = { lleva: c > 0, uno: c === 1, dos: c === 2, inst: c > 0 && p === 'si',
+                   noinst: c > 0 && p === 'no', pend: c > 0 && !p, nolleva: c === 0 }[flPos];
+      if(!ok) return false;
+    }
+    // Filtro por gabinete
+    const flGab = $('fGab').value;
+    if(flGab){
+      const nolleva = val(r.id, 'sinGabinete') === 'si' || !(r.gab > 0), g = val(r.id, 'gabineteEstado');
+      const ok = { lleva: !nolleva, inst: !nolleva && g === 'si', noinst: !nolleva && g === 'no',
+                   pend: !nolleva && !g, vand: !nolleva && g === 'vandalizado', nolleva }[flGab];
+      if(!ok) return false;
+    }
     // Filtro por estado / problema
     if(flProb){
       const estado    = val(r.id, 'estadoConect');
@@ -1159,7 +1197,15 @@ function render(){
 
   $('hdrPuntos').textContent = fmt(DATA.length);
   $('hdrVis').textContent = fmt(rows.length);
-  $('rowCount').textContent = `${fmt(rows.length)} de ${fmt(DATA.length)} puntos`;
+  // Totales de los puntos visibles: postes y gabinetes asignados / instalados.
+  const _ss = window.SERVER_STATUS || {};
+  const _v = (id, f) => (_ss[id] && _ss[id][f] && _ss[id][f].value) || '';
+  let posA = 0, posI = 0, gabA = 0, gabI = 0;
+  rows.forEach(r => {
+    const c = r.cols || 0; posA += c; if (_v(r.id,'postes') === 'si') posI += c;
+    const g = _v(r.id,'sinGabinete') === 'si' ? 0 : (r.gab || 0); gabA += g; if (_v(r.id,'gabineteEstado') === 'si') gabI += g;
+  });
+  $('rowCount').textContent = `${fmt(rows.length)} de ${fmt(DATA.length)} puntos · Postes ${posI}/${posA} · Gabinetes ${gabI}/${gabA}`;
 
   if(!rows.length){
     $('tbody').innerHTML = '';
