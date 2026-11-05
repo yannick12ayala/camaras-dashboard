@@ -955,7 +955,10 @@ function processRows(rows) {
     if (!ispData[isp]) ispData[isp] = { total: 0, factibles: 0, conectadas: 0, conServicio: 0, qaAprobados: 0 };
     ispData[isp].total += 1;
     // Factible = poste + gabinete instalados (ambos SÍ en el portal).
-    if (stEq(r, 'postes', 'si') && stEq(r, 'gabineteEstado', 'si')) ispData[isp].factibles += 1;
+    // Si el ID no lleva postes (cantidad 0) o no lleva gabinete, ese requisito se da por cumplido.
+    const postesOk = n(r[k.col]) === 0 || stEq(r, 'postes', 'si');
+    const gabOk    = n(r[k.gab]) === 0 || stEq(r, 'sinGabinete', 'si') || stEq(r, 'gabineteEstado', 'si');
+    if (postesOk && gabOk) ispData[isp].factibles += 1;
     // Conectividad ISP tendida = conect='si' Y no vandalizada.
     if (stEq(r, 'conect', 'si') && !stEq(r, 'motivoConect', 'vandalizado')) ispData[isp].conectadas += 1;
     // Con servicio = estadoConect === 'con'.
@@ -971,8 +974,11 @@ function processRows(rows) {
 
   // Todos los contadores operativos leen desde SERVER_STATUS (portal Control de avance).
   // Cuando ese estado no fue cargado aún, la métrica queda en 0.
-  const instGabCount     = dataRows.filter(r => stEq(r, 'gabineteEstado', 'si')).length;
-  const colInstaladas    = dataRows.filter(r => stEq(r, 'postes', 'si')).length;
+  // Postes y gabinetes se cuentan en UNIDADES asignadas a cada ID (columnas "Cantidad de
+  // Columnas" / "Cantidad de Gabinetes"), no en puntos: un ID con 2 postes marcado SÍ suma 2.
+  // Los puntos que no llevan (cantidad 0 o "sin gabinete") no suman ni al total ni a lo instalado.
+  const instGabCount     = dataRows.reduce((s, r) => s + (stEq(r, 'gabineteEstado', 'si') && !stEq(r, 'sinGabinete', 'si') ? n(r[k.gab]) : 0), 0);
+  const colInstaladas    = dataRows.reduce((s, r) => s + (stEq(r, 'postes', 'si') ? n(r[k.col]) : 0), 0);
   // Conectividad "instalada" = conect='si' Y no está vandalizada. Si el motivo es
   // 'vandalizado' el tendido no se considera operativo → cuenta como 0.
   const conectividadCount= dataRows.filter(r => stEq(r, 'conect', 'si') && !stEq(r, 'motivoConect', 'vandalizado')).length;

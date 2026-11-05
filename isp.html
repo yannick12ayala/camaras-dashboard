@@ -263,6 +263,7 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 
 /* Menú desplegable de motivos "Sin servicio" */
 .estado-wrap{position:relative; display:inline-block}
+.postes-cant{display:block; margin-top:3px; font-size:10.5px; color:var(--muted); text-align:center; white-space:nowrap}
 .estado-menu{
   position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
   min-width:180px; background:var(--surf); border:1px solid var(--line);
@@ -494,7 +495,8 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
         <option value="p_enrutamiento">Falla de enrutamiento</option>
       </optgroup>
       <optgroup label="Otros">
-        <option value="sin_postes">Sin postes instalados</option>
+        <option value="sin_postes">Sin postes instalados (lleva postes)</option>
+        <option value="no_lleva_postes">No lleva postes</option>
         <option value="sin_gabinete">Sin gabinete instalado</option>
         <option value="no_lleva_gab">No lleva gabinete</option>
         <option value="sin_energizado">Gabinete sin energizar</option>
@@ -721,14 +723,23 @@ function getPostes(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
   return s && s.value ? s.value : '';
 }
+// Cantidad de postes asignados al ID (columna "Cantidad de Columnas" del Excel).
+function postesAsignados(id) {
+  const r = DATA.find(x => x.id === id);
+  return r ? (r.cols || 0) : 0;
+}
 function stPostesCell(id) {
+  const cant = postesAsignados(id);
+  if (!cant) {
+    return '<td class="status-col"><span class="nolleva-badge" title="Este punto no lleva postes (Cantidad de Columnas = 0)">NO LLEVA</span></td>';
+  }
   const val = getPostes(id); // '' | 'si' | 'no'
   const cls = val === 'si' ? 'si' : (val === 'no' ? 'no' : 'pending');
   const label = val === 'si' ? 'SÍ' : (val === 'no' ? 'NO' : 'PENDIENTE');
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
   const tip = s ? (label + ' — por ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Clic para evaluar el poste';
-  return `<td class="status-col"><div class="estado-wrap"><button class="status ${cls}" data-postes-id="${id}" title="${tip}"><span class="dot"></span>${label}</button></div></td>`;
+  return `<td class="status-col"><div class="estado-wrap"><button class="status ${cls}" data-postes-id="${id}" title="${tip}"><span class="dot"></span>${label}</button><span class="postes-cant" title="Postes asignados a este ID">${cant} ${cant === 1 ? 'poste' : 'postes'}</span></div></td>`;
 }
 async function togglePostes(id) {
   const cur = getPostes(id);
@@ -1101,7 +1112,7 @@ function render(){
       const qaEstado  = val(r.id, 'qaEstado');
       const qaMotivo  = val(r.id, 'qaMotivo');
       const motivoC   = val(r.id, 'motivoConect');
-      const postesOk  = r._st && r._st.postes === 'si';
+      const postesOk  = val(r.id, 'postes') === 'si';
       switch(flProb){
         case 'conect_si':      if(conect !== 'si') return false; break;
         case 'conect_no':      if(conect === 'si') return false; break;
@@ -1112,7 +1123,8 @@ function render(){
         case 'p_onu':          if(motivo !== 'onu_alarmada' && qaMotivo !== 'onu_alarmada' && motivoC !== 'onu_alarmada') return false; break;
         case 'p_fibra':        if(motivo !== 'fibra_cortada' && qaMotivo !== 'fibra_cortada' && motivoC !== 'fibra_cortada') return false; break;
         case 'p_enrutamiento': if(motivo !== 'falla_enrutamiento' && qaMotivo !== 'falla_enrutamiento' && motivoC !== 'falla_enrutamiento') return false; break;
-        case 'sin_postes':     if(postesOk) return false; break;
+        case 'sin_postes':     if(!r.cols || postesOk) return false; break;
+        case 'no_lleva_postes':if(r.cols) return false; break;
         case 'sin_gabinete':   if(gabEst === 'si' || val(r.id, 'sinGabinete') === 'si') return false; break;
         case 'no_lleva_gab':   if(val(r.id, 'sinGabinete') !== 'si') return false; break;
         case 'sin_energizado': if(gabEnerg === 'si') return false; break;
@@ -2250,7 +2262,8 @@ setInterval(async () => {
   const tipoOf = r => TYPES.filter(t => r[t.field] > 0).map(t => (r[t.field] > 1 ? r[t.field] + 'x ' : '') + t.label).join(', ');
 
   const COLS = ['ID','Dirección','Barrio','Localidad','Tipo de cámara','MB','Coordenadas','ISP','Lote','N° gabinete',
-                'Postes','Gabinete','Energizado','Conectividad ISP','Instalación cámara','QA','ID dispositivo'];
+                'Cant. postes','Postes','Cant. gabinetes','Gabinete','Energizado','Conectividad ISP','Instalación cámara','QA','ID dispositivo'];
+  const gabCant = r => stv(r.id,'sinGabinete') === 'si' ? 0 : (r.gab || 0);
   function rowOf(r){
     const id = r.id;
     const gab = stv(id,'sinGabinete') === 'si' ? 'NO LLEVA' : stv(id,'gabineteEstado') === 'vandalizado' ? 'VANDALIZADO' : siNo(stv(id,'gabineteEstado'));
@@ -2259,7 +2272,8 @@ setInterval(async () => {
     return [ id, r.dir, r.barrio, r.loc, tipoOf(r), mb,
       (r.lat != null && r.lon != null) ? r.lat.toFixed(6) + ', ' + r.lon.toFixed(6) : '',
       ispOf(r) || 'Sin ISP', loteLabel(loteKey(r)), r.gabNum || '',
-      siNo(stv(id,'postes')), gab, siNo(stv(id,'gabineteEnergizado')), conect,
+      r.cols || 0, r.cols ? siNo(stv(id,'postes')) : 'NO LLEVA',
+      gabCant(r), gab, siNo(stv(id,'gabineteEnergizado')), conect,
       conMot(stv(id,'estadoConect'), stv(id,'motivoSinServicio')),
       conMot(stv(id,'qaEstado'), stv(id,'qaMotivo')).replace('CON SERVICIO','APROBADO').replace('SIN SERVICIO','RECHAZADO'),
       stv(id,'idDispositivo') ];
@@ -2335,16 +2349,19 @@ setInterval(async () => {
 
   function exportXls(){
     const sel = seleccionados(), wb = XLSX.utils.book_new();
-    const widths = [6,30,18,16,18,6,24,10,9,10,10,12,10,26,30,26,16].map(w => ({ wch: w }));
+    const widths = [6,30,18,16,18,6,24,10,9,10,8,10,10,12,10,26,30,26,16].map(w => ({ wch: w }));
     const addSheet = (name, rows) => {
       const ws = XLSX.utils.aoa_to_sheet([COLS, ...rows.map(rowOf)]);
       ws['!cols'] = widths; ws['!autofilter'] = { ref: ws['!ref'] };
       XLSX.utils.book_append_sheet(wb, ws, name.replace(/[\\\/\?\*\[\]:]/g, '').slice(0, 31));
     };
     // Hoja resumen
-    const res = [['ISP','Lote','Puntos','Postes SÍ','Gabinete SÍ','Energizado SÍ','Conectividad SÍ','Con servicio','QA aprobado']];
+    const res = [['ISP','Lote','Puntos','Postes asignados','Postes instalados','Gabinetes asignados','Gabinetes instalados','Energizado SÍ','Conectividad SÍ','Con servicio','QA aprobado']];
     sel.forEach(g => { const c = f => g.rows.filter(r => f(r.id)).length;
-      res.push([g.isp, loteLabel(g.lote), g.rows.length, c(id => stv(id,'postes')==='si'), c(id => stv(id,'gabineteEstado')==='si'),
+      const sum = f => g.rows.reduce((s, r) => s + f(r), 0);
+      res.push([g.isp, loteLabel(g.lote), g.rows.length,
+        sum(r => r.cols || 0), sum(r => stv(r.id,'postes')==='si' ? (r.cols || 0) : 0),
+        sum(gabCant), sum(r => stv(r.id,'gabineteEstado')==='si' ? gabCant(r) : 0),
         c(id => stv(id,'gabineteEnergizado')==='si'), c(id => stv(id,'conect')==='si'), c(id => stv(id,'estadoConect')==='con'), c(id => stv(id,'qaEstado')==='con')]); });
     const wsR = XLSX.utils.aoa_to_sheet(res); wsR['!cols'] = res[0].map(() => ({ wch: 14 }));
     XLSX.utils.book_append_sheet(wb, wsR, 'Resumen');
