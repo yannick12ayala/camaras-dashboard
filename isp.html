@@ -447,6 +447,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
       <option value="F2H">F2H</option>
       <option value="TELVISO">Telviso</option>
       <option value="BIBOP">Bibop</option>
+      <option value="__SIN__">Sin ISP</option>
     </select>
     <select id="fProblema" aria-label="Estado / Problema">
       <option value="">Cualquier estado</option>
@@ -1055,10 +1056,11 @@ function render(){
       if(flLote === '__SIN__'){ if(cur) return false; }
       else if(cur !== flLote) return false;
     }
-    // Filtro por ISP (mayúsculas)
+    // Filtro por ISP: usa el ISP asignado en el panel (override), no el del Excel.
     if(flISP){
-      const rispU = String(r.isp || '').trim().toUpperCase();
-      if(rispU !== flISP) return false;
+      const sIsp = ss[r.id] && ss[r.id].isp;
+      const rispU = (sIsp ? String(sIsp.value || '') : String(r.isp || '')).trim().toUpperCase();
+      if(flISP === '__SIN__' ? rispU !== '' : rispU !== flISP) return false;
     }
     // Filtro por estado / problema
     if(flProb){
