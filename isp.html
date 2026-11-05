@@ -332,6 +332,34 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 }
 .back-btn:hover{filter:brightness(1.08)}
 
+/* Exportar lotes (Excel / PDF) */
+.export-btn{
+  display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-family:inherit;
+  border:1px solid var(--map); background:var(--map-soft); color:var(--map);
+  padding:6px 12px; font-size:12px; font-weight:600; border-radius:6px;
+}
+.export-btn:hover{filter:brightness(1.05)}
+.exp-overlay{position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px}
+.exp-modal{background:var(--surf); color:var(--ink); border:1px solid var(--line); border-radius:12px; width:min(520px,100%); max-height:90vh; overflow:auto; padding:18px 20px; box-shadow:0 10px 40px rgba(0,0,0,.3)}
+.exp-modal h3{margin:0 0 4px; font-size:16px}
+.exp-modal .exp-sub{color:var(--muted); font-size:12px; margin-bottom:14px}
+.exp-modal label.exp-lbl{display:block; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:12px 0 6px}
+.exp-modal select{width:100%; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--surf); color:var(--ink); font-family:inherit; font-size:13px}
+.exp-lotes{display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:6px}
+.exp-lotes label{display:flex; align-items:center; gap:6px; font-size:13px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; cursor:pointer}
+.exp-lotes label .c{margin-left:auto; color:var(--muted); font-size:11px}
+.exp-lotes-actions{display:flex; gap:10px; margin-top:6px; font-size:12px}
+.exp-lotes-actions a{color:var(--accent); cursor:pointer; text-decoration:underline}
+.exp-modal .exp-opt{display:flex; align-items:flex-start; gap:8px; font-size:13px; margin-top:12px}
+.exp-modal .exp-opt small{display:block; color:var(--muted); font-size:11.5px}
+.exp-modal .exp-total{margin-top:12px; font-size:13px; color:var(--ink-2)}
+.exp-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:16px; flex-wrap:wrap}
+.exp-actions button{padding:8px 14px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid var(--line); background:transparent; color:var(--ink-2)}
+.exp-actions .x-xls{background:var(--good); border-color:var(--good); color:#fff}
+.exp-actions .x-pdf{background:var(--pdf); border-color:var(--pdf); color:#fff}
+.exp-actions button:disabled{opacity:.5; cursor:default}
+.exp-status{font-size:12px; color:var(--muted); margin-top:8px; min-height:16px}
+
 /* Columna ID: clickeable para desplegar historial */
 td.id{cursor:pointer; user-select:none; position:relative}
 td.id:hover{color:var(--accent)}
@@ -419,6 +447,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
       <div class="kv"><span class="k">Puntos</span><span class="v" id="hdrPuntos">—</span></div>
       <div class="kv"><span class="k">Visibles</span><span class="v" id="hdrVis">—</span></div>
       <a href="/" class="back-btn" title="Volver al dashboard principal">← Dashboard</a>
+      <button class="export-btn" id="exportBtn" title="Descargar lotes en Excel o PDF">⬇ Exportar</button>
       <button class="reset-btn" id="resetBtn" title="Volver a los valores originales del Excel">Restablecer</button>
       <button class="theme-btn" id="themeBtn" title="Cambiar tema">Tema</button>
     </div>
@@ -2202,5 +2231,188 @@ setInterval(async () => {
     _ispRefreshing = false;
   }
 }, 60 * 1000);
+
+// ── Exportar lotes a Excel / PDF ─────────────────────────────────────────
+// Elige ISP + uno o varios lotes. "Separar por lote": Excel con una hoja por lote,
+// PDF con cada lote empezando en página nueva. Si no, todo junto en una sola tabla.
+(function(){
+  const EXP_ISPS = [['','Todos los ISP'],['METROTEL','Metrotel'],['F2H','F2H'],['TELVISO','Telviso'],['BIBOP','Bibop'],['__SIN__','Sin ISP']];
+  const MOTIVOS = { onu_alarmada:'ONU alarmada', fibra_cortada:'Fibra cortada', sin_energia:'Sin energía',
+    vandalizado:'Vandalizado', falla_enrutamiento:'Falla de enrutamiento', en_servicio:'En servicio' };
+  const stv = (id, f) => { const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id][f]; return s && s.value ? String(s.value) : ''; };
+  const ispOf = r => { const s = window.SERVER_STATUS && window.SERVER_STATUS[r.id] && window.SERVER_STATUS[r.id].isp;
+    return (s ? String(s.value || '') : String(r.isp || '')).trim().toUpperCase(); };
+  const loteKey = r => stv(r.id, 'lote');                       // '' = sin lote
+  const loteLabel = l => l || 'Sin lote';
+  const loteNum = l => l ? (parseInt(l.replace(/\D/g, ''), 10) || 99) : 999;
+  const siNo = v => v === 'si' ? 'SÍ' : v === 'no' ? 'NO' : 'PENDIENTE';
+  const conMot = (v, mot) => v === 'con' ? 'CON SERVICIO' : v === 'sin' ? ('SIN SERVICIO' + (mot ? ' - ' + (MOTIVOS[mot] || mot) : '')) : 'PENDIENTE';
+  const tipoOf = r => TYPES.filter(t => r[t.field] > 0).map(t => (r[t.field] > 1 ? r[t.field] + 'x ' : '') + t.label).join(', ');
+
+  const COLS = ['ID','Dirección','Barrio','Localidad','Tipo de cámara','MB','Coordenadas','ISP','Lote','N° gabinete',
+                'Postes','Gabinete','Energizado','Conectividad ISP','Instalación cámara','QA','ID dispositivo'];
+  function rowOf(r){
+    const id = r.id;
+    const gab = stv(id,'sinGabinete') === 'si' ? 'NO LLEVA' : stv(id,'gabineteEstado') === 'vandalizado' ? 'VANDALIZADO' : siNo(stv(id,'gabineteEstado'));
+    const conect = siNo(stv(id,'conect')) + (stv(id,'motivoConect') && stv(id,'motivoConect') !== 'en_servicio' ? ' - ' + (MOTIVOS[stv(id,'motivoConect')] || stv(id,'motivoConect')) : '');
+    const mb = stv(id,'cantidadMB') || r.cantidadMB || '';
+    return [ id, r.dir, r.barrio, r.loc, tipoOf(r), mb,
+      (r.lat != null && r.lon != null) ? r.lat.toFixed(6) + ', ' + r.lon.toFixed(6) : '',
+      ispOf(r) || 'Sin ISP', loteLabel(loteKey(r)), r.gabNum || '',
+      siNo(stv(id,'postes')), gab, siNo(stv(id,'gabineteEnergizado')), conect,
+      conMot(stv(id,'estadoConect'), stv(id,'motivoSinServicio')),
+      conMot(stv(id,'qaEstado'), stv(id,'qaMotivo')).replace('CON SERVICIO','APROBADO').replace('SIN SERVICIO','RECHAZADO'),
+      stv(id,'idDispositivo') ];
+  }
+
+  function rowsForIsp(isp){
+    return DATA.filter(r => { const i = ispOf(r); return isp === '' ? true : isp === '__SIN__' ? i === '' : i === isp; });
+  }
+
+  const ov = document.createElement('div');
+  ov.className = 'exp-overlay'; ov.style.display = 'none';
+  ov.innerHTML = `<div class="exp-modal" role="dialog" aria-label="Exportar lotes">
+    <h3>Exportar lotes</h3>
+    <div class="exp-sub">Descargá un lote, varios o todos, en Excel o en PDF.</div>
+    <label class="exp-lbl" for="expIsp">ISP</label>
+    <select id="expIsp">${EXP_ISPS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+    <label class="exp-lbl">Lotes</label>
+    <div class="exp-lotes" id="expLotes"></div>
+    <div class="exp-lotes-actions"><a id="expAll">Marcar todos</a><a id="expNone">Desmarcar todos</a></div>
+    <label class="exp-opt"><input type="checkbox" id="expSplit" checked>
+      <span>Separar por lote<small>Excel: una hoja por lote · PDF: cada lote en página nueva. Desmarcado: todo junto en una sola tabla.</small></span></label>
+    <div class="exp-total" id="expTotal"></div>
+    <div class="exp-actions">
+      <button id="expCancel">Cancelar</button>
+      <button class="x-xls" id="expXls">Descargar Excel</button>
+      <button class="x-pdf" id="expPdf">Descargar PDF</button>
+    </div>
+    <div class="exp-status" id="expStatus"></div>
+  </div>`;
+  document.body.appendChild(ov);
+
+  function grupos(){
+    // Agrupa los puntos del ISP elegido por ISP+lote (si es "Todos los ISP", el lote va con su ISP).
+    const isp = $('expIsp').value;
+    const map = {};
+    rowsForIsp(isp).forEach(r => {
+      const i = ispOf(r) || 'Sin ISP', l = loteKey(r);
+      const key = isp === '' ? i + '|' + l : l;
+      (map[key] = map[key] || { key, isp: i, lote: l, rows: [] }).rows.push(r);
+    });
+    return Object.values(map).sort((a, b) => a.isp.localeCompare(b.isp) || loteNum(a.lote) - loteNum(b.lote));
+  }
+  function nombreGrupo(g){ return ($('expIsp').value === '' ? g.isp + ' - ' : '') + loteLabel(g.lote); }
+
+  function pintarLotes(preselect){
+    const gs = grupos();
+    $('expLotes').innerHTML = gs.length ? gs.map(g => `<label><input type="checkbox" value="${g.key}"${preselect == null || preselect === g.lote ? ' checked' : ''}>
+      ${nombreGrupo(g)}<span class="c">${g.rows.length}</span></label>`).join('') : '<span style="color:var(--muted);font-size:13px">No hay puntos para este ISP.</span>';
+    actualizarTotal();
+  }
+  function seleccionados(){
+    const keys = new Set([...$('expLotes').querySelectorAll('input:checked')].map(i => i.value));
+    return grupos().filter(g => keys.has(g.key)).map(g => {
+      g.rows.sort((a, b) => Number(a.id) - Number(b.id)); return g;
+    });
+  }
+  function actualizarTotal(){
+    const sel = seleccionados(), n = sel.reduce((s, g) => s + g.rows.length, 0);
+    $('expTotal').textContent = sel.length ? `${sel.length} lote(s) seleccionado(s) · ${n} puntos` : 'Elegí al menos un lote.';
+    $('expXls').disabled = $('expPdf').disabled = !sel.length;
+  }
+  function titulo(){
+    const isp = $('expIsp').value;
+    return 'Proyecto Cámaras V · ' + (EXP_ISPS.find(x => x[0] === isp) || [,''])[1];
+  }
+  function nombreArchivo(ext){
+    const sel = seleccionados(), isp = $('expIsp').value;
+    const base = 'Camaras_V_' + (isp === '' ? 'Todos' : isp === '__SIN__' ? 'Sin_ISP' : isp);
+    const parte = sel.length === 1 ? '_' + nombreGrupo(sel[0]).replace(/\s+/g, '_') : '_' + sel.length + '_lotes';
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    return (base + parte).replace(/[^\w\-]/g, '') + '_' + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + '.' + ext;
+  }
+
+  function exportXls(){
+    const sel = seleccionados(), wb = XLSX.utils.book_new();
+    const widths = [6,30,18,16,18,6,24,10,9,10,10,12,10,26,30,26,16].map(w => ({ wch: w }));
+    const addSheet = (name, rows) => {
+      const ws = XLSX.utils.aoa_to_sheet([COLS, ...rows.map(rowOf)]);
+      ws['!cols'] = widths; ws['!autofilter'] = { ref: ws['!ref'] };
+      XLSX.utils.book_append_sheet(wb, ws, name.replace(/[\\\/\?\*\[\]:]/g, '').slice(0, 31));
+    };
+    // Hoja resumen
+    const res = [['ISP','Lote','Puntos','Postes SÍ','Gabinete SÍ','Energizado SÍ','Conectividad SÍ','Con servicio','QA aprobado']];
+    sel.forEach(g => { const c = f => g.rows.filter(r => f(r.id)).length;
+      res.push([g.isp, loteLabel(g.lote), g.rows.length, c(id => stv(id,'postes')==='si'), c(id => stv(id,'gabineteEstado')==='si'),
+        c(id => stv(id,'gabineteEnergizado')==='si'), c(id => stv(id,'conect')==='si'), c(id => stv(id,'estadoConect')==='con'), c(id => stv(id,'qaEstado')==='con')]); });
+    const wsR = XLSX.utils.aoa_to_sheet(res); wsR['!cols'] = res[0].map(() => ({ wch: 14 }));
+    XLSX.utils.book_append_sheet(wb, wsR, 'Resumen');
+    if ($('expSplit').checked) sel.forEach(g => addSheet(nombreGrupo(g), g.rows));
+    else addSheet('Puntos', sel.flatMap(g => g.rows));
+    XLSX.writeFile(wb, nombreArchivo('xlsx'));
+  }
+
+  function loadScript(src){
+    return new Promise((ok, err) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => err(new Error('No se pudo cargar ' + src)); document.head.appendChild(s); });
+  }
+  async function exportPdf(){
+    if (!window.jspdf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    if (!window.jspdf.jsPDF.API.autoTable) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const sel = seleccionados(), split = $('expSplit').checked;
+    const pdfCols = COLS.filter(c => c !== 'Localidad');
+    const iLoc = COLS.indexOf('Localidad');
+    const generado = 'Generado ' + fmtDateTime(new Date().toISOString()) + ' · Municipalidad de Pilar';
+    const bloques = split ? sel.map(g => ({ sub: nombreGrupo(g), rows: g.rows }))
+                          : [{ sub: sel.map(nombreGrupo).join(', '), rows: sel.flatMap(g => g.rows) }];
+    bloques.forEach((b, i) => {
+      if (i > 0) doc.addPage();
+      doc.setFontSize(14); doc.setTextColor(20); doc.text(titulo(), 10, 12);
+      doc.setFontSize(10); doc.setTextColor(80);
+      doc.text(doc.splitTextToSize(b.sub + ' · ' + b.rows.length + ' puntos', 277), 10, 18);
+      doc.autoTable({
+        startY: 23, head: [pdfCols], body: b.rows.map(r => rowOf(r).filter((_, k) => k !== iLoc)),
+        styles: { fontSize: 6.5, cellPadding: 1.2, overflow: 'linebreak' },
+        headStyles: { fillColor: [15, 93, 140], fontSize: 6.5 },
+        alternateRowStyles: { fillColor: [246, 245, 241] },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 10 }, 1: { cellWidth: 32 }, 5: { cellWidth: 26 } },
+        margin: { left: 8, right: 8, bottom: 12 },
+      });
+    });
+    const pages = doc.getNumberOfPages();
+    for (let p = 1; p <= pages; p++) {
+      doc.setPage(p); doc.setFontSize(7); doc.setTextColor(120);
+      doc.text(generado, 8, 205); doc.text('Página ' + p + ' de ' + pages, 289, 205, { align: 'right' });
+    }
+    doc.save(nombreArchivo('pdf'));
+  }
+
+  async function run(fn, label){
+    $('expStatus').textContent = 'Generando ' + label + '…';
+    $('expXls').disabled = $('expPdf').disabled = true;
+    try { await fn(); $('expStatus').textContent = label + ' descargado.'; }
+    catch (e) { console.error(e); $('expStatus').textContent = 'Error al generar ' + label + ': ' + e.message; }
+    finally { actualizarTotal(); }
+  }
+
+  $('exportBtn').addEventListener('click', () => {
+    // Arranca con lo que esté filtrado en la tabla (ISP y lote), si hay.
+    const fI = $('fISP') ? $('fISP').value : '', fL = $('fLote') ? $('fLote').value : '';
+    $('expIsp').value = fI;
+    pintarLotes(fL ? (fL === '__SIN__' ? '' : fL) : null);
+    $('expStatus').textContent = '';
+    ov.style.display = 'flex';
+  });
+  $('expIsp').addEventListener('change', () => pintarLotes(null));
+  $('expLotes').addEventListener('change', actualizarTotal);
+  $('expAll').addEventListener('click', () => { $('expLotes').querySelectorAll('input').forEach(i => i.checked = true); actualizarTotal(); });
+  $('expNone').addEventListener('click', () => { $('expLotes').querySelectorAll('input').forEach(i => i.checked = false); actualizarTotal(); });
+  $('expCancel').addEventListener('click', () => { ov.style.display = 'none'; });
+  ov.addEventListener('click', e => { if (e.target === ov) ov.style.display = 'none'; });
+  $('expXls').addEventListener('click', () => run(exportXls, 'Excel'));
+  $('expPdf').addEventListener('click', () => run(exportPdf, 'PDF'));
+})();
 
 </script>
