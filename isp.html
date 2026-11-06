@@ -90,7 +90,9 @@ body{
 }
 .filters input:focus, .filters select:focus{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft)}
 .filters .grow{flex:1; min-width:220px}
-.filters .count{margin-left:auto; color:var(--muted); font-size:12px; padding:0 8px}
+.filters .count{margin-left:auto; color:var(--muted); font-size:12px; padding:0 8px; display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; white-space:nowrap}
+.filters .count b{color:var(--ink); font-weight:600}
+.filters .rc-chip{border:1px solid var(--line); border-radius:999px; padding:2px 9px; background:var(--bg)}
 .filters .clear{border:none; background:transparent; color:var(--accent); font-size:12px; cursor:pointer; padding:4px 8px; border-radius:5px}
 .filters .clear:hover{background:var(--accent-soft)}
 
@@ -1205,7 +1207,10 @@ function render(){
     const c = r.cols || 0; posA += c; if (_v(r.id,'postes') === 'si') posI += c;
     const g = _v(r.id,'sinGabinete') === 'si' ? 0 : (r.gab || 0); gabA += g; if (_v(r.id,'gabineteEstado') === 'si') gabI += g;
   });
-  $('rowCount').textContent = `${fmt(rows.length)} de ${fmt(DATA.length)} puntos · Postes ${posI}/${posA} · Gabinetes ${gabI}/${gabA}`;
+  $('rowCount').innerHTML =
+    (rows.length === DATA.length ? `<b>${fmt(rows.length)}</b> puntos` : `Mostrando <b>${fmt(rows.length)}</b> de ${fmt(DATA.length)} puntos`) +
+    `<span class="rc-chip" title="Postes instalados / postes asignados a los puntos visibles">Postes instalados <b>${posI}</b> de ${posA}</span>` +
+    `<span class="rc-chip" title="Gabinetes instalados / gabinetes asignados a los puntos visibles">Gabinetes instalados <b>${gabI}</b> de ${gabA}</span>`;
 
   if(!rows.length){
     $('tbody').innerHTML = '';
