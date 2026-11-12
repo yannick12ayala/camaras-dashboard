@@ -10,6 +10,8 @@
 <link rel="apple-touch-icon" href="/icon-192.png">
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}</script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -340,6 +342,31 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 }
 .back-btn:hover{filter:brightness(1.08)}
 
+/* Solapas */
+.tabs{display:flex; gap:4px; margin-bottom:14px; border-bottom:1px solid var(--line); overflow-x:auto}
+.tab{border:none; background:transparent; color:var(--muted); font:inherit; font-size:13px; font-weight:600; padding:9px 14px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap}
+.tab:hover{color:var(--ink)}
+.tab.active{color:var(--accent); border-bottom-color:var(--accent)}
+/* Mapa del plan Fiberco */
+.pm-bar{display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; margin-bottom:12px}
+.pm-group{display:flex; flex-wrap:wrap; gap:6px}
+.pm-btn{border:1px solid var(--line); background:var(--surf); color:var(--ink-2); font:inherit; font-size:12px; font-weight:600; padding:6px 12px; border-radius:999px; cursor:pointer}
+.pm-btn.active{background:var(--accent); border-color:var(--accent); color:#fff}
+#planMap{width:100%; height:calc(100vh - 290px); min-height:420px; border:1px solid var(--line); border-radius:var(--radius); z-index:1}
+.pm-legend{display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:10px; font-size:12px; color:var(--ink-2)}
+.pm-legend span.dot{display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:6px; vertical-align:-1px}
+.pm-note{margin-top:6px; font-size:12px; color:var(--muted)}
+.pf-pin{width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font:700 11px/1 'JetBrains Mono',monospace; color:#fff; border:3px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.pf-pin.done{background:#22a565 !important}
+.pf-pin.postes{border-radius:6px}
+.pf-pop{font-family:'Inter',system-ui,sans-serif; font-size:12.5px; min-width:210px}
+.pf-pop .t{font-weight:700; font-size:13.5px; margin-bottom:6px}
+.pf-pop .r{display:flex; justify-content:space-between; gap:10px; padding:2px 0; border-bottom:1px solid #eee}
+.pf-pop .r span:first-child{color:#777}
+.pf-pop .ok{color:#1E9E4A; font-weight:600}
+.pf-pop .no{color:#C13B2A; font-weight:600}
+.pf-pop a{display:inline-block; margin-top:8px; padding:5px 10px; border-radius:6px; background:#2D6A4F; color:#fff !important; text-decoration:none; font-weight:600}
+
 /* Exportar lotes (Excel / PDF) */
 .export-btn{
   display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-family:inherit;
@@ -462,6 +489,33 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
   </header>
 
   <div class="ro-banner">🔒 <b>Modo consulta:</b> podés ver toda la información, pero solo un administrador puede modificar estados, datos y fotos.</div>
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="tabla">📋 Control de avance</button>
+    <button class="tab" data-tab="mapa">🗺️ Mapa plan Fiberco</button>
+  </nav>
+
+  <!-- Solapa: mapa del plan Fiberco -->
+  <section id="tabMapa" hidden>
+    <div class="pm-bar">
+      <div class="pm-group" id="pmIsp">
+        <button class="pm-btn active" data-isp="">Todos los ISP</button>
+        <button class="pm-btn" data-isp="BIBOP">Bibop</button>
+        <button class="pm-btn" data-isp="F2H">F2H</button>
+        <button class="pm-btn" data-isp="TELVISO">Telviso</button>
+        <button class="pm-btn" data-isp="METROTEL">Metrotel</button>
+      </div>
+      <div class="pm-group" id="pmEstado">
+        <button class="pm-btn active" data-st="all">Todos</button>
+        <button class="pm-btn" data-st="pend">Pendientes</button>
+        <button class="pm-btn" data-st="done">Finalizados</button>
+      </div>
+    </div>
+    <div id="planMap"></div>
+    <div class="pm-legend" id="pmLegend"></div>
+    <div class="pm-note">Cada punto muestra su número de orden de trabajo. Se pone <b style="color:#22a565">verde</b> cuando Fiberco termina la tarea: gabinete en SÍ y, si lleva postes (cuadrados), postes en SÍ. Se actualiza solo cada minuto.</div>
+  </section>
+
+  <div id="tabTabla">
   <div class="filters">
     <input type="search" id="q" class="grow" placeholder="Buscar por ID, dirección o barrio…">
     <select id="fLote" aria-label="Lote">
@@ -575,6 +629,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
       <div class="empty" id="empty" style="display:none">Sin resultados. Probá cambiar el filtro o <b>Limpiar</b>.</div>
     </div>
   </div>
+  </div><!-- /tabTabla -->
 
   <div class="foot">
     <div class="note">
@@ -2345,12 +2400,102 @@ setInterval(async () => {
     if (ae2 && ae2.closest && ae2.closest('#tbl') && /^(INPUT|TEXTAREA|SELECT)$/.test(ae2.tagName)) return;
     if (document.querySelector('.estado-menu, tr.history-row, .foto-modal')) return;
     window.renderTable();
+    if (window.renderPlanMap) window.renderPlanMap();
   } catch (e) {
     // sin conexión: se reintenta en el próximo minuto
   } finally {
     _ispRefreshing = false;
   }
 }, 60 * 1000);
+
+// ── Solapas + mapa del plan Fiberco ──────────────────────────────────────
+// Pin numerado con el orden de trabajo; color del ISP mientras está pendiente,
+// verde cuando la tarea está finalizada (gabinete SÍ y, si lleva, postes SÍ).
+// Cuadrado = el punto también lleva postes.
+(function(){
+  const COLORS = { BIBOP: '#f59e0b', F2H: '#3b82f6', TELVISO: '#a855f7', METROTEL: '#ef4444' };
+  const NAMES  = { BIBOP: 'Bibop', F2H: 'F2H', TELVISO: 'Telviso', METROTEL: 'Metrotel' };
+  let map = null, layer = null, fitted = false;
+  let fIsp = '', fSt = 'all';
+  const sv = (id, f) => { const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id][f]; return s && s.value ? String(s.value) : ''; };
+
+  function puntos(){
+    return DATA.filter(r => getPlan(r.id).tipo && r.lat != null && r.lon != null).map(r => {
+      const p = getPlan(r.id), isp = getIspAsignado(r.id);
+      const gabOk = sv(r.id, 'gabineteEstado') === 'si', posOk = sv(r.id, 'postes') === 'si';
+      return { r, p, isp, gabOk, posOk, done: gabOk && (p.tipo !== 'gab_postes' || posOk) };
+    });
+  }
+  function popup(x){
+    const { r, p } = x;
+    const est = ok => ok ? '<span class="ok">✓ Instalado</span>' : '<span class="no">✗ Pendiente</span>';
+    const trabajo = p.tipo === 'gab_postes' ? `Gabinete + ${r.cols || ''} poste${r.cols === 1 ? '' : 's'}` : 'Gabinete';
+    return `<div class="pf-pop"><div class="t">${x.done ? '✅' : '🛠️'} Orden de trabajo #${String(p.orden).padStart(2, '0')}</div>
+      <div class="r"><span>ID</span><b>${r.id}</b></div>
+      <div class="r"><span>Dirección</span><span>${r.dir || '—'}</span></div>
+      <div class="r"><span>ISP</span><span>${NAMES[x.isp] || x.isp || '—'}${getLote(r.id) ? ' · ' + getLote(r.id) : ''}</span></div>
+      <div class="r"><span>Trabajo</span><span>${trabajo}</span></div>
+      <div class="r"><span>Gabinete</span>${est(x.gabOk)}</div>
+      ${p.tipo === 'gab_postes' ? `<div class="r"><span>Postes</span>${est(x.posOk)}</div>` : ''}
+      <div class="r"><span>Estado</span>${x.done ? '<span class="ok">Finalizado</span>' : '<span class="no">Pendiente</span>'}</div>
+      <a href="https://www.google.com/maps?q=${r.lat.toFixed(6)},${r.lon.toFixed(6)}" target="_blank" rel="noopener">Ver en Google Maps</a></div>`;
+  }
+  function draw(){
+    if (typeof L === 'undefined') return;
+    if (!map) {
+      map = L.map('planMap', { center: [-34.458, -58.912], zoom: 12 });
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19
+      }).addTo(map);
+    }
+    // No redibujar si hay un popup abierto (refresco automático)
+    if (map._popup && map.hasLayer(map._popup)) return;
+    if (layer) layer.remove();
+    layer = L.featureGroup().addTo(map);
+    const all = puntos(), porIsp = all.filter(x => !fIsp || x.isp === fIsp);
+    const vis = porIsp.filter(x => fSt === 'all' || (fSt === 'done' ? x.done : !x.done));
+    vis.sort((a, b) => b.p.orden - a.p.orden).forEach(x => {
+      const icon = L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12],
+        html: `<div class="pf-pin${x.done ? ' done' : ''}${x.p.tipo === 'gab_postes' ? ' postes' : ''}" style="background:${COLORS[x.isp] || '#8b90a7'}">${x.p.orden || ''}</div>` });
+      L.marker([x.r.lat, x.r.lon], { icon }).bindPopup(popup(x), { maxWidth: 300 }).addTo(layer);
+    });
+    if (!fitted && vis.length) { map.fitBounds(layer.getBounds().pad(0.08)); fitted = true; }
+    // Contadores
+    const nDone = porIsp.filter(x => x.done).length;
+    document.querySelector('#pmEstado [data-st="all"]').textContent  = `Todos (${porIsp.length})`;
+    document.querySelector('#pmEstado [data-st="pend"]').textContent = `Pendientes (${porIsp.length - nDone})`;
+    document.querySelector('#pmEstado [data-st="done"]').textContent = `Finalizados (${nDone})`;
+    document.querySelectorAll('#pmIsp [data-isp]').forEach(b => {
+      const k = b.dataset.isp, n = all.filter(x => !k || x.isp === k).length;
+      b.textContent = (k ? NAMES[k] : 'Todos los ISP') + ` (${n})`;
+    });
+    $('pmLegend').innerHTML = Object.keys(COLORS).map(k => `<span><span class="dot" style="background:${COLORS[k]}"></span>${NAMES[k]} · pendiente</span>`).join('') +
+      '<span><span class="dot" style="background:#22a565"></span>Finalizado</span>' +
+      '<span><span class="dot" style="background:#8b90a7;border-radius:2px"></span>Cuadrado: también lleva postes</span>';
+  }
+  window.renderPlanMap = () => { if (!$('tabMapa').hidden) draw(); };
+
+  $('tabs').addEventListener('click', e => {
+    const b = e.target.closest('.tab'); if (!b) return;
+    document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('active', t === b));
+    const mapa = b.dataset.tab === 'mapa';
+    $('tabMapa').hidden = !mapa;
+    $('tabTabla').hidden = mapa;
+    if (mapa) { draw(); setTimeout(() => map && map.invalidateSize(), 50); }
+  });
+  $('pmIsp').addEventListener('click', e => {
+    const b = e.target.closest('[data-isp]'); if (!b) return;
+    fIsp = b.dataset.isp; fitted = false;
+    document.querySelectorAll('#pmIsp .pm-btn').forEach(x => x.classList.toggle('active', x === b));
+    draw();
+  });
+  $('pmEstado').addEventListener('click', e => {
+    const b = e.target.closest('[data-st]'); if (!b) return;
+    fSt = b.dataset.st;
+    document.querySelectorAll('#pmEstado .pm-btn').forEach(x => x.classList.toggle('active', x === b));
+    draw();
+  });
+})();
 
 // ── Exportar lotes a Excel / PDF ─────────────────────────────────────────
 // Elige ISP + uno o varios lotes. "Separar por lote": Excel con una hoja por lote,

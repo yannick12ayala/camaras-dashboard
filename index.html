@@ -258,11 +258,6 @@
     position: relative;
     z-index: 1;
   }
-  #planMapContainer { width:100%; height:480px; border-radius: var(--r-lg); overflow:hidden; border:1px solid var(--border); position:relative; z-index:1; }
-  .pf-pin { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-            font: 700 11px/1 'JetBrains Mono', monospace; color:#fff; border:3px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.45); }
-  .pf-pin.done { background:#22a565 !important; }
-  .pf-pin.postes { border-radius:6px; }
   .map-filters {
     display: flex;
     flex-wrap: wrap;
@@ -382,7 +377,7 @@
     .conprob-legend { width: 100%; }
 
     /* Mapa más bajo y botones de filtro más tocables */
-    #mapContainer, #planMapContainer { height: 380px; }
+    #mapContainer { height: 380px; }
     .map-filter-btn { padding: 7px 14px; }
 
     /* Tabla de incidentes: scroll horizontal propio (no empuja la página) */
@@ -407,7 +402,7 @@
     .row-cameras > .metric-card.card-total .metric-value { font-size: 28px; }
 
     .isp-grid { grid-template-columns: 1fr; }
-    #mapContainer, #planMapContainer { height: 300px; }
+    #mapContainer { height: 300px; }
     .obs-card { padding: 0.85rem 0.9rem; }
 
     /* Donuts un poco más chicos */
@@ -609,15 +604,6 @@
       Primero se instalan los <span style="color:#9b8afb;font-weight:600">■ gabinetes</span>, después los <span style="color:#22d3ee;font-weight:600">■ postes</span>
     </div>
     <div id="planFibercoGrid" class="plan-grid"></div>
-    <div class="chart-title" style="margin-top:22px">Mapa del plan Fiberco</div>
-    <div class="chart-subtitle">Cada punto muestra su número de orden de trabajo. Se pone <span style="color:#3ecf8e;font-weight:600">verde</span> cuando Fiberco termina la tarea (gabinete y, si lleva, postes).</div>
-    <div class="map-filters" id="planMapFilters" style="margin-top:10px">
-      <button class="map-filter-btn active" data-pf="all">Todos</button>
-      <button class="map-filter-btn" data-pf="pend">Pendientes</button>
-      <button class="map-filter-btn" data-pf="done">Finalizados</button>
-    </div>
-    <div id="planMapContainer"></div>
-    <div class="map-legend" id="planMapLegend"></div>
   </div>
 
   <!-- AVANCE DE CONECTIVIDAD POR ISP (viene del portal ISP) -->
@@ -1750,10 +1736,6 @@ function updateMapFromRows(dataRows, keys) {
       instGabinete: portalGabinete ? 1 : (st ? 0 : safeInt(r[keys.instGab])),
       sinGabinete: !!(st && st.sinGabinete && st.sinGabinete.value === 'si'),
       lote: (st && st.lote && st.lote.value) ? String(st.lote.value) : '',
-      planTipo: (st && st.planFiberco && st.planFiberco.value) || '',
-      planOrden: (st && st.planOrden && st.planOrden.value) ? parseInt(st.planOrden.value, 10) : 0,
-      postesOk: !!(st && st.postes && st.postes.value === 'si'),
-      cantPostes: safeInt(r[keys.col]),
       fechaGabinete: safe(r[keys.fechaGab]||''),
       fechaColumna: safe(r[keys.fechaCol]||''),
       fechaCamara: safe(r[keys.fechaCam]||''),
@@ -1768,80 +1750,7 @@ function updateMapFromRows(dataRows, keys) {
   const conMap = cams.filter(c => c.conectividad === 1).length;
   console.log('Cams con conectividad en mapa:', conMap, 'de', cams.length);
   if (cams.length > 0) initMap(cams);
-  initPlanMap(cams.filter(c => c.planTipo));
 }
-
-// ── Mapa del plan Fiberco ─────────────────────────────────────────────
-// Pin numerado con el orden de trabajo; color del ISP mientras está pendiente,
-// verde cuando la tarea está finalizada (gabinete SÍ y, si lleva, postes SÍ).
-// Cuadrado = el punto también lleva postes.
-let planMap = null, planMarkers = [];
-window.PLAN_MAP_FILTER = 'all';
-const PF_COLORS = { BIBOP: '#f59e0b', F2H: '#3b82f6', TELVISO: '#a855f7', METROTEL: '#ef4444' };
-const PF_NAMES  = { BIBOP: 'Bibop', F2H: 'F2H', TELVISO: 'Telviso', METROTEL: 'Metrotel' };
-const pfDone = c => c.instGabinete === 1 && (c.planTipo !== 'gab_postes' || c.postesOk);
-function initPlanMap(cams) {
-  const el = document.getElementById('planMapContainer');
-  if (!el || typeof L === 'undefined') return;
-  let prevCenter = null, prevZoom = null;
-  if (planMap) { prevCenter = planMap.getCenter(); prevZoom = planMap.getZoom(); planMap.remove(); planMap = null; }
-  planMarkers = [];
-  planMap = L.map('planMapContainer', { center: prevCenter || [-34.4580, -58.9120], zoom: prevZoom || 12 });
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19
-  }).addTo(planMap);
-  cams.sort((a, b) => b.planOrden - a.planOrden); // los primeros del recorrido quedan arriba
-  cams.forEach(c => {
-    const done = pfDone(c);
-    const color = PF_COLORS[c.isp] || '#8b90a7';
-    const icon = L.divIcon({
-      className: '', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12],
-      html: `<div class="pf-pin${done ? ' done' : ''}${c.planTipo === 'gab_postes' ? ' postes' : ''}" style="background:${color}">${c.planOrden || ''}</div>`
-    });
-    const trabajo = c.planTipo === 'gab_postes' ? `Gabinete + ${c.cantPostes || ''} poste${c.cantPostes === 1 ? '' : 's'}` : 'Gabinete';
-    const badge = ok => ok ? '<span class="popup-badge badge-ok">✓ Instalado</span>' : '<span class="popup-badge badge-warn">✗ Pendiente</span>';
-    const lat = c.lat.toFixed(6), lon = c.lon.toFixed(6);
-    const popup = `<div class="popup-title">${done ? '✅' : '🛠️'} Orden de trabajo #${String(c.planOrden).padStart(2, '0')}</div>
-      <div class="popup-row"><span class="label">ID</span><span class="value">#${c.id}</span></div>
-      <div class="popup-row"><span class="label">Dirección</span><span class="value" style="font-family:var(--font)">${c.direccion}</span></div>
-      <div class="popup-row"><span class="label">ISP</span><span class="value">${PF_NAMES[c.isp] || c.isp || '—'}${c.lote ? ' · ' + c.lote : ''}</span></div>
-      <div class="popup-row"><span class="label">Trabajo</span><span class="value">${trabajo}</span></div>
-      <div class="popup-row"><span class="label">Gabinete</span><span class="value">${badge(c.instGabinete === 1)}</span></div>
-      ${c.planTipo === 'gab_postes' ? `<div class="popup-row"><span class="label">Postes</span><span class="value">${badge(c.postesOk)}</span></div>` : ''}
-      <div class="popup-row"><span class="label">Estado</span><span class="value">${done ? '<span class="popup-badge badge-ok">Finalizado</span>' : '<span class="popup-badge badge-warn">Pendiente</span>'}</span></div>
-      <a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" rel="noopener" class="popup-pdf-btn" style="background:rgba(52,168,83,0.12);color:#34a853;border-color:rgba(52,168,83,0.3)">Ver en Google Maps</a>`;
-    const m = L.marker([c.lat, c.lon], { icon }).bindPopup(popup, { maxWidth: 280 });
-    m.pfDone = done;
-    m.addTo(planMap);
-    planMarkers.push(m);
-  });
-  if (!prevCenter && planMarkers.length) planMap.fitBounds(L.featureGroup(planMarkers).getBounds().pad(0.08));
-  // Contadores en los botones y leyenda
-  const nDone = planMarkers.filter(m => m.pfDone).length;
-  document.querySelector('#planMapFilters [data-pf="all"]').textContent  = `Todos (${planMarkers.length})`;
-  document.querySelector('#planMapFilters [data-pf="pend"]').textContent = `Pendientes (${planMarkers.length - nDone})`;
-  document.querySelector('#planMapFilters [data-pf="done"]').textContent = `Finalizados (${nDone})`;
-  const isps = [...new Set(cams.map(c => c.isp))].filter(i => PF_COLORS[i]);
-  document.getElementById('planMapLegend').innerHTML =
-    isps.map(i => `<div class="map-legend-item"><div class="map-legend-dot" style="background:${PF_COLORS[i]}"></div>${PF_NAMES[i]} · pendiente</div>`).join('') +
-    `<div class="map-legend-item"><div class="map-legend-dot" style="background:#22a565"></div>Finalizado</div>` +
-    `<div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7;border-radius:2px"></div>Cuadrado: también lleva postes</div>`;
-  applyPlanMapFilter();
-}
-function applyPlanMapFilter() {
-  const f = window.PLAN_MAP_FILTER;
-  document.querySelectorAll('#planMapFilters .map-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.pf === f));
-  planMarkers.forEach(m => {
-    const show = f === 'all' || (f === 'done' ? m.pfDone : !m.pfDone);
-    if (show) m.addTo(planMap); else planMap.removeLayer(m);
-  });
-}
-document.getElementById('planMapFilters').addEventListener('click', e => {
-  const b = e.target.closest('[data-pf]');
-  if (!b) return;
-  window.PLAN_MAP_FILTER = b.dataset.pf;
-  applyPlanMapFilter();
-});
 
 // Boot map immediately with static data
 document.addEventListener('DOMContentLoaded', () => {
