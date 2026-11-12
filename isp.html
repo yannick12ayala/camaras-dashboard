@@ -352,6 +352,9 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .pm-group{display:flex; flex-wrap:wrap; gap:6px}
 .pm-btn{border:1px solid var(--line); background:var(--surf); color:var(--ink-2); font:inherit; font-size:12px; font-weight:600; padding:6px 12px; border-radius:999px; cursor:pointer}
 .pm-btn.active{background:var(--accent); border-color:var(--accent); color:#fff}
+.pm-btn.pm-xls{border-color:var(--good); color:var(--good)}
+.pm-btn.pm-pdf{border-color:var(--pdf); color:var(--pdf)}
+.pm-btn:disabled{opacity:.5; cursor:default}
 #planMap{width:100%; height:calc(100vh - 290px); min-height:420px; border:1px solid var(--line); border-radius:var(--radius); z-index:1}
 .pm-legend{display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:10px; font-size:12px; color:var(--ink-2)}
 .pm-legend span.dot{display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:6px; vertical-align:-1px}
@@ -508,6 +511,10 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
         <button class="pm-btn active" data-st="all">Todos</button>
         <button class="pm-btn" data-st="pend">Pendientes</button>
         <button class="pm-btn" data-st="done">Finalizados</button>
+      </div>
+      <div class="pm-group">
+        <button class="pm-btn pm-xls" id="planXls" title="Descargar el plan en Excel, ordenado por orden de trabajo">⬇ Excel del plan</button>
+        <button class="pm-btn pm-pdf" id="planPdf" title="Descargar el plan en PDF, ordenado por orden de trabajo">⬇ PDF del plan</button>
       </div>
     </div>
     <div id="planMap"></div>
@@ -2506,6 +2513,97 @@ setInterval(async () => {
     document.querySelectorAll('#pmEstado .pm-btn').forEach(x => x.classList.toggle('active', x === b));
     drawSafe();
   });
+
+  // ── Exportar el plan (Excel / PDF), por ISP y en orden de trabajo ascendente.
+  // Respeta los filtros elegidos arriba (ISP y Todos/Pendientes/Finalizados).
+  const ISP_ORDEN = ['BIBOP', 'F2H', 'TELVISO', 'METROTEL'];
+  const HEAD = ['Orden', 'ID', 'Dirección', 'Barrio', 'Localidad', 'ISP', 'Lote', 'Trabajo', 'Cant. postes',
+                'N° gabinete', 'Coordenadas', 'Gabinete', 'Postes', 'Estado'];
+  function grupos(){
+    const sel = puntos().filter(x => (!fIsp || x.isp === fIsp) && (fSt === 'all' || (fSt === 'done' ? x.done : !x.done)));
+    const g = {};
+    sel.forEach(x => (g[x.isp] = g[x.isp] || []).push(x));
+    return Object.keys(g).sort((a, b) => ((ISP_ORDEN.indexOf(a) + 1) || 99) - ((ISP_ORDEN.indexOf(b) + 1) || 99))
+      .map(k => ({ isp: k, rows: g[k].sort((a, b) => a.p.orden - b.p.orden) }));
+  }
+  function fila(x){
+    const { r, p } = x;
+    const est = ok => ok ? 'INSTALADO' : 'PENDIENTE';
+    return [ p.orden, r.id, r.dir || '', r.barrio || '', r.loc || '', NAMES[x.isp] || x.isp || 'Sin ISP', getLote(r.id) || '',
+      p.tipo === 'gab_postes' ? 'Gabinete + postes' : 'Gabinete', r.cols || 0, r.gabNum || '',
+      r.lat.toFixed(6) + ', ' + r.lon.toFixed(6), est(x.gabOk), p.tipo === 'gab_postes' ? est(x.posOk) : 'NO LLEVA',
+      x.done ? 'FINALIZADO' : 'PENDIENTE' ];
+  }
+  function sufijo(){
+    const d = new Date(), z = n => String(n).padStart(2, '0');
+    return (fIsp ? '_' + (NAMES[fIsp] || fIsp) : '') + (fSt === 'pend' ? '_pendientes' : fSt === 'done' ? '_finalizados' : '') +
+           '_' + d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate());
+  }
+  function planXls(){
+    const gs = grupos(); if (!gs.length) { alert('No hay puntos del plan con este filtro.'); return; }
+    const wb = XLSX.utils.book_new();
+    const res = [['ISP', 'Puntos', 'Finalizados', 'Pendientes', 'Gabinetes instalados', 'Postes a instalar', 'Postes instalados']];
+    gs.forEach(g => res.push([NAMES[g.isp] || g.isp, g.rows.length, g.rows.filter(x => x.done).length, g.rows.filter(x => !x.done).length,
+      g.rows.filter(x => x.gabOk).length, g.rows.reduce((s, x) => s + (x.p.tipo === 'gab_postes' ? (x.r.cols || 0) : 0), 0),
+      g.rows.reduce((s, x) => s + (x.p.tipo === 'gab_postes' && x.posOk ? (x.r.cols || 0) : 0), 0)]));
+    const wsR = XLSX.utils.aoa_to_sheet(res); wsR['!cols'] = res[0].map(() => ({ wch: 18 }));
+    XLSX.utils.book_append_sheet(wb, wsR, 'Resumen');
+    gs.forEach(g => {
+      const rows = g.rows.map(fila);
+      const ws = XLSX.utils.aoa_to_sheet([HEAD, ...rows]);
+      // Link a Google Maps en la columna Coordenadas
+      g.rows.forEach((x, i) => {
+        const ref = XLSX.utils.encode_cell({ r: i + 1, c: 10 });
+        ws[ref].l = { Target: `https://www.google.com/maps?q=${x.r.lat.toFixed(6)},${x.r.lon.toFixed(6)}` };
+      });
+      ws['!cols'] = [7, 7, 30, 18, 16, 10, 8, 18, 10, 11, 24, 12, 12, 12].map(w => ({ wch: w }));
+      ws['!autofilter'] = { ref: ws['!ref'] };
+      XLSX.utils.book_append_sheet(wb, ws, NAMES[g.isp] || g.isp || 'Sin ISP');
+    });
+    XLSX.writeFile(wb, 'Plan_Fiberco' + sufijo() + '.xlsx');
+  }
+  const cargar = src => new Promise((ok, err) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => err(new Error('No se pudo cargar ' + src)); document.head.appendChild(s); });
+  async function planPdf(){
+    const gs = grupos(); if (!gs.length) { alert('No hay puntos del plan con este filtro.'); return; }
+    if (!window.jspdf) await cargar('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    if (!window.jspdf.jsPDF.API.autoTable) await cargar('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+    const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const head = HEAD.filter(h => h !== 'Localidad'), iLoc = HEAD.indexOf('Localidad');
+    gs.forEach((g, i) => {
+      if (i > 0) doc.addPage();
+      const nDone = g.rows.filter(x => x.done).length;
+      doc.setFontSize(14); doc.setTextColor(20); doc.text('Plan de instalación Fiberco · ' + (NAMES[g.isp] || g.isp), 10, 12);
+      doc.setFontSize(10); doc.setTextColor(80);
+      doc.text(`${g.rows.length} puntos · ${nDone} finalizados · ${g.rows.length - nDone} pendientes · ordenado por orden de trabajo`, 10, 18);
+      doc.autoTable({
+        startY: 23, head: [head], body: g.rows.map(x => fila(x).filter((_, k) => k !== iLoc)),
+        styles: { fontSize: 7.5, cellPadding: 1.4, overflow: 'linebreak' },
+        headStyles: { fillColor: [45, 106, 79], fontSize: 7.5 },
+        alternateRowStyles: { fillColor: [246, 245, 241] },
+        columnStyles: { 0: { fontStyle: 'bold', halign: 'center', cellWidth: 12 }, 1: { cellWidth: 11 }, 2: { cellWidth: 45 } },
+        didParseCell: d => {
+          if (d.section !== 'body') return;
+          if (d.cell.raw === 'FINALIZADO' || d.cell.raw === 'INSTALADO') d.cell.styles.textColor = [30, 158, 74];
+          if (d.cell.raw === 'PENDIENTE') d.cell.styles.textColor = [193, 59, 42];
+        },
+        margin: { left: 8, right: 8, bottom: 12 },
+      });
+    });
+    const pages = doc.getNumberOfPages();
+    const gen = 'Generado ' + fmtDateTime(new Date().toISOString()) + ' · Municipalidad de Pilar · Proyecto Cámaras V';
+    for (let p = 1; p <= pages; p++) {
+      doc.setPage(p); doc.setFontSize(7); doc.setTextColor(120);
+      doc.text(gen, 8, 205); doc.text('Página ' + p + ' de ' + pages, 289, 205, { align: 'right' });
+    }
+    doc.save('Plan_Fiberco' + sufijo() + '.pdf');
+  }
+  async function correr(btn, fn){
+    const txt = btn.textContent; btn.disabled = true; btn.textContent = 'Generando…';
+    try { await fn(); } catch (e) { console.error(e); alert('No se pudo generar el archivo: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = txt; }
+  }
+  $('planXls').addEventListener('click', e => correr(e.currentTarget, planXls));
+  $('planPdf').addEventListener('click', e => correr(e.currentTarget, planPdf));
 })();
 
 // ── Exportar lotes a Excel / PDF ─────────────────────────────────────────
