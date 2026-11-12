@@ -506,13 +506,11 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
       <option value="nolleva">No lleva gabinete</option>
     </select>
     <select id="fPlan" aria-label="Plan Fiberco">
-      <option value="">Plan Fiberco: todos</option>
-      <option value="en">En el plan Fiberco</option>
-      <option value="gab_pend">Etapa 1 · gabinete pendiente</option>
-      <option value="gab_ok">Etapa 1 · gabinete instalado</option>
-      <option value="pos">Etapa 2 · lleva postes</option>
-      <option value="pos_pend">Etapa 2 · postes pendientes</option>
-      <option value="fuera">Fuera del plan</option>
+      <option value="">Plan Fiberco</option>
+      <option value="en">Todos los del plan</option>
+      <option value="falta_gab">Falta gabinete</option>
+      <option value="falta_pos">Falta poste</option>
+      <option value="listo">Terminados</option>
     </select>
     <select id="fProblema" aria-label="Estado / Problema">
       <option value="">Cualquier estado</option>
@@ -736,7 +734,7 @@ $('fPostes').addEventListener('change', render);
 $('fGab').addEventListener('change', render);
 $('fPlan').addEventListener('change', () => {
   // Al filtrar por el plan, ordenar por ISP y orden de instalación.
-  if ($('fPlan').value && $('fPlan').value !== 'fuera') { sortK = 'plan'; sortDir = 1; }
+  if ($('fPlan').value) { sortK = 'plan'; sortDir = 1; }
   render();
 });
 $('clear').addEventListener('click', () => {
@@ -1186,8 +1184,10 @@ function render(){
     const flPlan = $('fPlan').value;
     if(flPlan){
       const p = getPlan(r.id), g = val(r.id, 'gabineteEstado'), po = val(r.id, 'postes');
-      const ok = { en: !!p.tipo, gab_pend: !!p.tipo && g !== 'si', gab_ok: !!p.tipo && g === 'si',
-                   pos: p.tipo === 'gab_postes', pos_pend: p.tipo === 'gab_postes' && po !== 'si', fuera: !p.tipo }[flPlan];
+      const faltaGab = !!p.tipo && g !== 'si';
+      const faltaPos = p.tipo === 'gab_postes' && po !== 'si';
+      const ok = { en: !!p.tipo, falta_gab: faltaGab, falta_pos: faltaPos,
+                   listo: !!p.tipo && !faltaGab && !faltaPos }[flPlan];
       if(!ok) return false;
     }
     // Filtro por estado / problema

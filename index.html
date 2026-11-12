@@ -601,8 +601,7 @@
   <div class="chart-card">
     <div class="chart-title">Gabinetes y postes por ISP <span style="color:var(--text2);font-weight:500;font-size:12px;letter-spacing:.04em;text-transform:uppercase;margin-left:6px">(alimentado por Control de avance)</span></div>
     <div class="chart-subtitle">
-      <span style="color:#9b8afb;font-weight:600">■ Etapa 1 · Gabinetes</span> (todos los puntos del plan) &nbsp;·&nbsp;
-      <span style="color:#22d3ee;font-weight:600">■ Etapa 2 · Postes</span> (solo los puntos que llevan postes, en unidades)
+      Primero se instalan los <span style="color:#9b8afb;font-weight:600">■ gabinetes</span>, después los <span style="color:#22d3ee;font-weight:600">■ postes</span>
     </div>
     <div id="planFibercoGrid" class="plan-grid"></div>
   </div>
@@ -1856,9 +1855,9 @@ function renderPlanFiberco(plan) {
   };
   const tarjeta = (titulo, p, cls) => `<div class="plan-card ${cls || ''}">
     <h4>${titulo}<span>${p.puntos} puntos</span></h4>
-    ${fila('Etapa 1 · Gabinetes', p.gabOk, p.puntos, '#9b8afb')}
-    ${p.posTot ? fila(`Etapa 2 · Postes (${p.posPuntos} ${p.posPuntos === 1 ? 'punto' : 'puntos'})`, p.posOk, p.posTot, '#22d3ee')
-               : '<div class="plan-row"><div class="pr-top"><span>Etapa 2 · Postes</span><span>no lleva</span></div></div>'}
+    ${fila('Gabinetes instalados', p.gabOk, p.puntos, '#9b8afb')}
+    ${p.posTot ? fila('Postes instalados', p.posOk, p.posTot, '#22d3ee')
+               : '<div class="plan-row"><div class="pr-top"><span>Postes</span><span>no lleva</span></div></div>'}
   </div>`;
   const tot = { puntos: 0, gabOk: 0, posTot: 0, posOk: 0, posPuntos: 0 };
   isps.forEach(i => Object.keys(tot).forEach(f => tot[f] += plan[i][f]));
