@@ -548,6 +548,9 @@ const server = http.createServer(async (req, res) => {
         isp: ['', 'METROTEL', 'F2H', 'TELVISO', 'BIBOP'],
         lote: ['', 'Lote 1', 'Lote 2', 'Lote 3', 'Lote 4', 'Lote 5', 'Lote 6', 'Lote 7', 'Lote 8', 'Lote 9', 'Lote 10'],
         sinGabinete: ['si', ''],
+        // Plan de instalación Fiberco: tipo de trabajo y orden dentro del ISP
+        planFiberco: ['', 'gabinete', 'gab_postes'],
+        planOrden: ['', ...Array.from({ length: 200 }, (_, i) => String(i + 1))],
       };
       const all = loadStatuses();
       const now = new Date().toISOString();
@@ -754,6 +757,8 @@ const server = http.createServer(async (req, res) => {
     const freeText = { numServicio: 60, cantidadMB: 20, idDispositivo: 60, observacion: 500 }; // { campo: maxLen }
     // Lote: opciones fijas del 1 al 10 (mas '' para "sin asignar").
     closed.lote = ['','Lote 1','Lote 2','Lote 3','Lote 4','Lote 5','Lote 6','Lote 7','Lote 8','Lote 9','Lote 10'];
+    closed.planFiberco = ['', 'gabinete', 'gab_postes'];
+    closed.planOrden = ['', ...Array.from({ length: 200 }, (_, i) => String(i + 1))];
     if (closed[field]) {
       if (!closed[field].includes(value)) return json(res, 400, { error: 'valor no permitido para ' + field });
     } else if (field in freeText) {

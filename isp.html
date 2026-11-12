@@ -265,6 +265,11 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 
 /* Menú desplegable de motivos "Sin servicio" */
 .estado-wrap{position:relative; display:inline-block}
+.plan-col{white-space:nowrap}
+.plan-badge{display:inline-block; padding:3px 8px; border-radius:6px; font-size:11.5px; border:1px solid var(--accent); background:var(--accent-soft); color:var(--accent)}
+.plan-badge b{font-family:'JetBrains Mono',monospace; font-weight:600}
+.plan-badge.done{border-color:var(--good); background:var(--good-soft); color:var(--good)}
+.plan-none{color:var(--muted)}
 .postes-cant{display:block; margin-top:3px; font-size:10.5px; color:var(--muted); text-align:center; white-space:nowrap}
 .estado-menu{
   position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
@@ -500,6 +505,15 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
       <option value="vand">Gabinete vandalizado</option>
       <option value="nolleva">No lleva gabinete</option>
     </select>
+    <select id="fPlan" aria-label="Plan Fiberco">
+      <option value="">Plan Fiberco: todos</option>
+      <option value="en">En el plan Fiberco</option>
+      <option value="gab_pend">Etapa 1 · gabinete pendiente</option>
+      <option value="gab_ok">Etapa 1 · gabinete instalado</option>
+      <option value="pos">Etapa 2 · lleva postes</option>
+      <option value="pos_pend">Etapa 2 · postes pendientes</option>
+      <option value="fuera">Fuera del plan</option>
+    </select>
     <select id="fProblema" aria-label="Estado / Problema">
       <option value="">Cualquier estado</option>
       <optgroup label="Estado de conectividad">
@@ -547,6 +561,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
           <th data-k="gabNum">N° Gabinete</th>
           <th data-k="isp">ISP</th>
           <th data-k="lote">Lote</th>
+          <th data-k="plan" title="Plan de instalación Fiberco: orden dentro del ISP y trabajo a realizar">Plan Fiberco</th>
           <th class="status-col" data-k="conect">Conectividad ISP</th>
           <th data-k="numServicio">N° de servicio</th>
           <th class="status-col" data-k="qaEstado">QA</th>
@@ -719,11 +734,16 @@ if ($('fISP'))      $('fISP').addEventListener('change', render);
 if ($('fProblema')) $('fProblema').addEventListener('change', render);
 $('fPostes').addEventListener('change', render);
 $('fGab').addEventListener('change', render);
+$('fPlan').addEventListener('change', () => {
+  // Al filtrar por el plan, ordenar por ISP y orden de instalación.
+  if ($('fPlan').value && $('fPlan').value !== 'fuera') { sortK = 'plan'; sortDir = 1; }
+  render();
+});
 $('clear').addEventListener('click', () => {
   $('q').value='';
   if ($('fLote'))     $('fLote').value = '';
   if ($('fISP'))      $('fISP').value  = '';
-  $('fPostes').value = ''; $('fGab').value = '';
+  $('fPostes').value = ''; $('fGab').value = ''; $('fPlan').value = '';
   if ($('fProblema')) $('fProblema').value = '';
   render();
 });
@@ -747,6 +767,26 @@ function getPostes(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].postes;
   return s && s.value ? s.value : '';
 }
+// Plan de instalación Fiberco (cargado por planilla): tipo de trabajo + orden dentro del ISP.
+// Etapa 1 = gabinetes (todos los del plan); etapa 2 = postes (solo 'gab_postes').
+function getPlan(id) {
+  const s = window.SERVER_STATUS && window.SERVER_STATUS[id];
+  const tipo = s && s.planFiberco && s.planFiberco.value ? s.planFiberco.value : '';
+  const orden = s && s.planOrden && s.planOrden.value ? parseInt(s.planOrden.value, 10) : 0;
+  return { tipo, orden };
+}
+function planCell(id) {
+  const p = getPlan(id);
+  if (!p.tipo) return '<td class="plan-col"><span class="plan-none">—</span></td>';
+  const st = window.SERVER_STATUS[id] || {};
+  const gabOk = st.gabineteEstado && st.gabineteEstado.value === 'si';
+  const posOk = st.postes && st.postes.value === 'si';
+  const done = gabOk && (p.tipo === 'gabinete' || posOk);
+  const label = p.tipo === 'gab_postes' ? 'Gabinete + postes' : 'Gabinete';
+  return '<td class="plan-col"><span class="plan-badge' + (done ? ' done' : '') + '" title="Plan Fiberco · orden ' + p.orden +
+         ' dentro del ISP · ' + label + (done ? ' · completo' : '') + '"><b>#' + String(p.orden).padStart(2, '0') + '</b> ' + label + (done ? ' ✓' : '') + '</span></td>';
+}
+
 // Cantidad de postes asignados al ID (columna "Cantidad de Columnas" del Excel).
 function postesAsignados(id) {
   const r = DATA.find(x => x.id === id);
@@ -1142,6 +1182,14 @@ function render(){
                    pend: !nolleva && !g, vand: !nolleva && g === 'vandalizado', nolleva }[flGab];
       if(!ok) return false;
     }
+    // Filtro por plan Fiberco
+    const flPlan = $('fPlan').value;
+    if(flPlan){
+      const p = getPlan(r.id), g = val(r.id, 'gabineteEstado'), po = val(r.id, 'postes');
+      const ok = { en: !!p.tipo, gab_pend: !!p.tipo && g !== 'si', gab_ok: !!p.tipo && g === 'si',
+                   pos: p.tipo === 'gab_postes', pos_pend: p.tipo === 'gab_postes' && po !== 'si', fuera: !p.tipo }[flPlan];
+      if(!ok) return false;
+    }
     // Filtro por estado / problema
     if(flProb){
       const estado    = val(r.id, 'estadoConect');
@@ -1185,6 +1233,13 @@ function render(){
     if(STATUS_COLS.includes(sortK)){ va = a._st[sortK]; vb = b._st[sortK]; }
     else { va = a[sortK] ?? ''; vb = b[sortK] ?? ''; }
     if(sortK === 'id') return (Number(va) - Number(vb)) * sortDir;
+    if(sortK === 'plan'){
+      // Por ISP y orden de instalación; los que no están en el plan, al final.
+      const pa = getPlan(a.id), pb = getPlan(b.id);
+      if(!pa.tipo !== !pb.tipo) return pa.tipo ? -1 : 1;
+      const ia = getIspAsignado(a.id), ib = getIspAsignado(b.id);
+      return (ia.localeCompare(ib) || (pa.orden - pb.orden) || (Number(a.id) - Number(b.id))) * sortDir;
+    }
     return String(va).localeCompare(String(vb), 'es') * sortDir;
   });
 
@@ -1268,6 +1323,7 @@ function render(){
       ${gabNumCell}
       ${ispCell(r.id)}
       ${loteCell(r.id)}
+      ${planCell(r.id)}
       ${stConectCell(r.id)}
       ${numServicioCell(r.id)}
       ${stQaCell(r.id)}
@@ -2312,7 +2368,7 @@ setInterval(async () => {
   const conMot = (v, mot) => v === 'con' ? 'CON SERVICIO' : v === 'sin' ? ('SIN SERVICIO' + (mot ? ' - ' + (MOTIVOS[mot] || mot) : '')) : 'PENDIENTE';
   const tipoOf = r => TYPES.filter(t => r[t.field] > 0).map(t => (r[t.field] > 1 ? r[t.field] + 'x ' : '') + t.label).join(', ');
 
-  const COLS = ['ID','Dirección','Barrio','Localidad','Tipo de cámara','MB','Coordenadas','ISP','Lote','N° gabinete',
+  const COLS = ['ID','Dirección','Barrio','Localidad','Tipo de cámara','MB','Coordenadas','ISP','Lote','Plan Fiberco','N° gabinete',
                 'Cant. postes','Postes','Cant. gabinetes','Gabinete','Energizado','Conectividad ISP','Instalación cámara','QA','ID dispositivo'];
   const gabCant = r => stv(r.id,'sinGabinete') === 'si' ? 0 : (r.gab || 0);
   function rowOf(r){
@@ -2322,7 +2378,9 @@ setInterval(async () => {
     const mb = stv(id,'cantidadMB') || r.cantidadMB || '';
     return [ id, r.dir, r.barrio, r.loc, tipoOf(r), mb,
       (r.lat != null && r.lon != null) ? r.lat.toFixed(6) + ', ' + r.lon.toFixed(6) : '',
-      ispOf(r) || 'Sin ISP', loteLabel(loteKey(r)), r.gabNum || '',
+      ispOf(r) || 'Sin ISP', loteLabel(loteKey(r)),
+      (p => p.tipo ? '#' + String(p.orden).padStart(2, '0') + ' ' + (p.tipo === 'gab_postes' ? 'Gabinete + postes' : 'Gabinete') : '')(getPlan(id)),
+      r.gabNum || '',
       r.cols || 0, r.cols ? siNo(stv(id,'postes')) : 'NO LLEVA',
       gabCant(r), gab, siNo(stv(id,'gabineteEnergizado')), conect,
       conMot(stv(id,'estadoConect'), stv(id,'motivoSinServicio')),
@@ -2400,7 +2458,7 @@ setInterval(async () => {
 
   function exportXls(){
     const sel = seleccionados(), wb = XLSX.utils.book_new();
-    const widths = [6,30,18,16,18,6,24,10,9,10,8,10,10,12,10,26,30,26,16].map(w => ({ wch: w }));
+    const widths = [6,30,18,16,18,6,24,10,9,20,10,8,10,10,12,10,26,30,26,16].map(w => ({ wch: w }));
     const addSheet = (name, rows) => {
       const ws = XLSX.utils.aoa_to_sheet([COLS, ...rows.map(rowOf)]);
       ws['!cols'] = widths; ws['!autofilter'] = { ref: ws['!ref'] };
