@@ -538,6 +538,24 @@ const server = http.createServer(async (req, res) => {
   // ── Subida de datos (secreto, sin sesión) ──
   // Carga masiva de asignaciones (ISP / Lote / Sin gabinete) desde una planilla.
   // Mismo secreto que /api/upload. Solo acepta esos tres campos, con valores cerrados.
+  // Borrar el HISTORIAL (status_log) de todos los ID salvo los indicados en `keep`.
+  // No toca los estados actuales ni las fotos. Antes de reescribir deja un respaldo.
+  if (m === 'POST' && url === '/api/status/log/purge') {
+    if (!UPLOAD_SECRET || req.headers['x-upload-secret'] !== UPLOAD_SECRET) return json(res, 401, { error: 'Unauthorized' });
+    try {
+      const body = JSON.parse(String(await readBody(req) || '{}'));
+      const keep = new Set((Array.isArray(body.keep) ? body.keep : []).map(String));
+      if (!fs.existsSync(STATUS_LOG)) return json(res, 200, { ok: true, total: 0, kept: 0, removed: 0 });
+      const lines = fs.readFileSync(STATUS_LOG, 'utf8').split('\n').filter(l => l.trim());
+      const backup = STATUS_LOG.replace(/\.jsonl$/, '') + '.backup-' + new Date().toISOString().replace(/[:.]/g, '-') + '.jsonl';
+      fs.copyFileSync(STATUS_LOG, backup);
+      const kept = lines.filter(l => { try { return keep.has(String(JSON.parse(l).id)); } catch { return false; } });
+      fs.writeFileSync(STATUS_LOG, kept.length ? kept.join('\n') + '\n' : '');
+      console.log('[log-purge] total', lines.length, '· conservados', kept.length, '· respaldo', backup);
+      return json(res, 200, { ok: true, total: lines.length, kept: kept.length, removed: lines.length - kept.length, backup: path.basename(backup) });
+    } catch (e) { return json(res, 400, { error: String(e) }); }
+  }
+
   if (m === 'POST' && url === '/api/status/bulk') {
     if (!UPLOAD_SECRET || req.headers['x-upload-secret'] !== UPLOAD_SECRET) return json(res, 401, { error: 'Unauthorized' });
     try {
