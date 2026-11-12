@@ -2267,6 +2267,10 @@ document.addEventListener('click', async (e) => {
 
 render();
 window.renderTable = render; // expuesto para el refresco automático
+// Expuestos para el mapa del plan y la exportación (viven fuera de initFromData)
+window.getPlan = getPlan;
+window.getLote = getLote;
+window.getIspAsignado = getIspAsignado;
 } // fin initFromData
 
 // Theme toggle
@@ -2420,7 +2424,7 @@ setInterval(async () => {
   const sv = (id, f) => { const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id][f]; return s && s.value ? String(s.value) : ''; };
 
   function puntos(){
-    return DATA.filter(r => getPlan(r.id).tipo && r.lat != null && r.lon != null).map(r => {
+    return DATA.filter(r => getPlan(r.id).tipo && isFinite(r.lat) && isFinite(r.lon) && r.lat !== null && r.lon !== null).map(r => {
       const p = getPlan(r.id), isp = getIspAsignado(r.id);
       const gabOk = sv(r.id, 'gabineteEstado') === 'si', posOk = sv(r.id, 'postes') === 'si';
       return { r, p, isp, gabOk, posOk, done: gabOk && (p.tipo !== 'gab_postes' || posOk) };
@@ -2473,7 +2477,14 @@ setInterval(async () => {
       '<span><span class="dot" style="background:#22a565"></span>Finalizado</span>' +
       '<span><span class="dot" style="background:#8b90a7;border-radius:2px"></span>Cuadrado: también lleva postes</span>';
   }
-  window.renderPlanMap = () => { if (!$('tabMapa').hidden) draw(); };
+  const drawSafe = () => {
+    try { draw(); }
+    catch (e) {
+      console.error('[mapa plan]', e);
+      $('pmLegend').innerHTML = '<span style="color:var(--bad)">No se pudo dibujar el mapa: ' + e.message + '</span>';
+    }
+  };
+  window.renderPlanMap = () => { if (!$('tabMapa').hidden) drawSafe(); };
 
   $('tabs').addEventListener('click', e => {
     const b = e.target.closest('.tab'); if (!b) return;
@@ -2481,19 +2492,19 @@ setInterval(async () => {
     const mapa = b.dataset.tab === 'mapa';
     $('tabMapa').hidden = !mapa;
     $('tabTabla').hidden = mapa;
-    if (mapa) { draw(); setTimeout(() => map && map.invalidateSize(), 50); }
+    if (mapa) { drawSafe(); setTimeout(() => map && map.invalidateSize(), 50); }
   });
   $('pmIsp').addEventListener('click', e => {
     const b = e.target.closest('[data-isp]'); if (!b) return;
     fIsp = b.dataset.isp; fitted = false;
     document.querySelectorAll('#pmIsp .pm-btn').forEach(x => x.classList.toggle('active', x === b));
-    draw();
+    drawSafe();
   });
   $('pmEstado').addEventListener('click', e => {
     const b = e.target.closest('[data-st]'); if (!b) return;
     fSt = b.dataset.st;
     document.querySelectorAll('#pmEstado .pm-btn').forEach(x => x.classList.toggle('active', x === b));
-    draw();
+    drawSafe();
   });
 })();
 
