@@ -780,9 +780,10 @@ function planCell(id) {
   const gabOk = st.gabineteEstado && st.gabineteEstado.value === 'si';
   const posOk = st.postes && st.postes.value === 'si';
   const done = gabOk && (p.tipo === 'gabinete' || posOk);
-  const label = p.tipo === 'gab_postes' ? 'Gabinete + postes' : 'Gabinete';
-  return '<td class="plan-col"><span class="plan-badge' + (done ? ' done' : '') + '" title="Plan Fiberco · orden ' + p.orden +
-         ' dentro del ISP · ' + label + (done ? ' · completo' : '') + '"><b>#' + String(p.orden).padStart(2, '0') + '</b> ' + label + (done ? ' ✓' : '') + '</span></td>';
+  const trabajo = p.tipo === 'gab_postes' ? 'gabinete + postes' : 'gabinete';
+  return '<td class="plan-col"><span class="plan-badge' + (done ? ' done' : '') + '" title="Plan Fiberco · orden de trabajo ' + p.orden +
+         ' dentro del ISP · instalar ' + trabajo + (done ? ' · completo' : '') + '">Orden de trabajo <b>#' + String(p.orden).padStart(2, '0') + '</b>' +
+         (p.tipo === 'gab_postes' ? ' · + postes' : '') + (done ? ' ✓' : '') + '</span></td>';
 }
 
 // Cantidad de postes asignados al ID (columna "Cantidad de Columnas" del Excel).
@@ -2379,7 +2380,7 @@ setInterval(async () => {
     return [ id, r.dir, r.barrio, r.loc, tipoOf(r), mb,
       (r.lat != null && r.lon != null) ? r.lat.toFixed(6) + ', ' + r.lon.toFixed(6) : '',
       ispOf(r) || 'Sin ISP', loteLabel(loteKey(r)),
-      (p => p.tipo ? '#' + String(p.orden).padStart(2, '0') + ' ' + (p.tipo === 'gab_postes' ? 'Gabinete + postes' : 'Gabinete') : '')(getPlan(id)),
+      (p => p.tipo ? 'Orden de trabajo #' + String(p.orden).padStart(2, '0') + (p.tipo === 'gab_postes' ? ' + postes' : '') : '')(getPlan(id)),
       r.gabNum || '',
       r.cols || 0, r.cols ? siNo(stv(id,'postes')) : 'NO LLEVA',
       gabCant(r), gab, siNo(stv(id,'gabineteEnergizado')), conect,
