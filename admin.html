@@ -30,6 +30,7 @@
   tr:last-child td{border-bottom:none}
   .tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
   .tag.admin{background:rgba(77,142,240,.15);color:var(--blue)}
+  .tag.tec{background:rgba(245,166,35,.15);color:var(--amber)}
   .tag.act{background:rgba(62,207,142,.15);color:var(--green)}
   .tag.pend{background:rgba(245,166,35,.15);color:var(--amber)}
   .act-btn{background:none;border:1px solid var(--border);color:var(--text2);border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;margin-left:6px}
@@ -83,13 +84,18 @@
     const rows = $('rows'); rows.innerHTML='';
     (d.users||[]).forEach(u=>{
       const tr = document.createElement('tr');
-      const tipo = u.isAdmin ? '<span class="tag admin">admin</span>' : 'usuario';
+      const tipo = u.isAdmin ? '<span class="tag admin">admin</span>'
+                 : u.isTecnico ? '<span class="tag tec" title="Puede cambiar postes, gabinete, energizado, instalación de cámara, fotos, observaciones y enviar Cambio de estado">técnico</span>'
+                 : 'usuario';
       const estado = u.pending ? '<span class="tag pend">pendiente</span>' : '<span class="tag act">activo</span>';
       let acciones = '';
       if (!u.isMain) {
         acciones = (u.isAdmin
                      ? '<button class="act-btn" data-setadmin="'+u.user+'" data-val="0">Quitar admin</button>'
-                     : '<button class="act-btn" data-setadmin="'+u.user+'" data-val="1">Hacer admin</button>')
+                     : (u.isTecnico
+                         ? '<button class="act-btn" data-settec="'+u.user+'" data-val="0">Quitar técnico</button>'
+                         : '<button class="act-btn" data-settec="'+u.user+'" data-val="1">Hacer técnico</button>')
+                       + '<button class="act-btn" data-setadmin="'+u.user+'" data-val="1">Hacer admin</button>')
                  + '<button class="act-btn" data-reset="'+u.user+'">Resetear clave</button>'
                  + '<button class="act-btn del" data-del="'+u.user+'">Borrar</button>';
       }
@@ -111,6 +117,16 @@
     const reset = e.target.getAttribute('data-reset');
     const del = e.target.getAttribute('data-del');
     const setAdm = e.target.getAttribute('data-setadmin');
+    const setTec = e.target.getAttribute('data-settec');
+    if (setTec){
+      const makeTec = e.target.getAttribute('data-val') === '1';
+      if(!confirm(makeTec
+        ? '¿Hacer técnico a "' + setTec + '"?\n\nVa a poder cambiar en el Control de avance: postes, gabinete, energizado, instalación de cámara, fotos, observaciones y enviar "Cambio de estado". El resto lo sigue viendo en modo consulta.'
+        : '¿Quitar el perfil técnico a "' + setTec + '"? Vuelve a modo consulta.'))return;
+      const d = await (await fetch('/api/admin/set-tecnico',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:setTec,isTecnico:makeTec})})).json();
+      if(d.ok) load(); else alert(d.error||'Error');
+      return;
+    }
     if (setAdm){
       const makeAdmin = e.target.getAttribute('data-val') === '1';
       if(!confirm((makeAdmin ? '¿Dar permiso de admin a "' : '¿Quitar el permiso de admin a "') + setAdm + '"?'))return;

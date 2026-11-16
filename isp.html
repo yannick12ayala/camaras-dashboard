@@ -235,6 +235,16 @@ body.read-only .id-dispositivo-input,
 body.read-only .observacion-input{opacity:.75}
 body.read-only .notify-btn,
 body.read-only .foto-modal .fm-upload{display:none}
+/* Perfil técnico de campo: habilita solo postes, gabinete, energizado, instalación de cámara,
+   observaciones, fotos y "Cambio de estado". El resto sigue en modo consulta. */
+body.read-only.is-tecnico .status[data-postes-id],
+body.read-only.is-tecnico .status[data-gabinete-id],
+body.read-only.is-tecnico .status[data-energizado-id],
+body.read-only.is-tecnico .status[data-estado-id],
+body.read-only.is-tecnico .observacion-input{pointer-events:auto; cursor:pointer; opacity:1}
+body.read-only.is-tecnico .observacion-input{cursor:text}
+body.read-only.is-tecnico .notify-btn{display:inline-flex}
+body.read-only.is-tecnico .foto-modal .fm-upload{display:block}
 
 /* Opción "Restablecer a PENDIENTE" en los menús desplegables — visible solo para admin.
    El CSS la oculta por default; body.is-admin la muestra. */
@@ -1610,7 +1620,10 @@ document.addEventListener('change', async (e) => {
 document.addEventListener('focusin', (e) => {
   if (window.IS_ADMIN) return;
   const t = e.target;
-  if (t && t.matches && t.matches('.isp-input, .lote-input, .num-servicio-input, .cantidad-mb-input, .id-dispositivo-input, .observacion-input')) {
+  const bloqueados = window.IS_TECNICO
+    ? '.isp-input, .lote-input, .num-servicio-input, .cantidad-mb-input, .id-dispositivo-input'
+    : '.isp-input, .lote-input, .num-servicio-input, .cantidad-mb-input, .id-dispositivo-input, .observacion-input';
+  if (t && t.matches && t.matches(bloqueados)) {
     t.blur();
   }
 }, true);
@@ -2127,14 +2140,14 @@ document.addEventListener('click', async (e) => {
   // ── Toggle Gabinete (SI/NO) — admin abre menú con opción de restablecer ──
   const gabBtn = e.target.closest && e.target.closest('[data-gabinete-id]');
   if (gabBtn) {
-    if (window.IS_ADMIN) { openStateMenu(gabBtn, 'Gabinete', ['si','no'], 'gabineteEstado', v => setGabinete(gabBtn.dataset.gabineteId, v)); return; }
+    if (window.IS_ADMIN || window.IS_TECNICO) { openStateMenu(gabBtn, 'Gabinete', ['si','no'], 'gabineteEstado', v => setGabinete(gabBtn.dataset.gabineteId, v)); return; }
     await toggleGabinete(gabBtn.dataset.gabineteId); return;
   }
 
   // ── Toggle Gabinete Energizado — mismo tratamiento ──
   const engBtn = e.target.closest && e.target.closest('[data-energizado-id]');
   if (engBtn) {
-    if (window.IS_ADMIN) { openStateMenu(engBtn, 'Energizado', ['si','no'], 'gabineteEnergizado', v => setEnergizado(engBtn.dataset.energizadoId, v)); return; }
+    if (window.IS_ADMIN || window.IS_TECNICO) { openStateMenu(engBtn, 'Energizado', ['si','no'], 'gabineteEnergizado', v => setEnergizado(engBtn.dataset.energizadoId, v)); return; }
     await toggleEnergizado(engBtn.dataset.energizadoId); return;
   }
 
@@ -2237,7 +2250,7 @@ document.addEventListener('click', async (e) => {
   // ── Toggle Postes (persistente en el server) — admin abre menú ──
   const postesId = btn.dataset.postesId;
   if (postesId) {
-    if (window.IS_ADMIN) { openStateMenu(btn, 'Postes', ['si','no'], 'postes', v => setPostes(postesId, v)); return; }
+    if (window.IS_ADMIN || window.IS_TECNICO) { openStateMenu(btn, 'Postes', ['si','no'], 'postes', v => setPostes(postesId, v)); return; }
     togglePostes(postesId); return;
   }
 
@@ -2304,8 +2317,14 @@ async function bootstrap() {
     try {
       const me = meResp && meResp.ok ? await meResp.json() : null;
       window.IS_ADMIN = !!(me && me.isAdmin);
-    } catch { window.IS_ADMIN = false; }
+      window.IS_TECNICO = !window.IS_ADMIN && !!(me && me.isTecnico);
+    } catch { window.IS_ADMIN = false; window.IS_TECNICO = false; }
     document.body.classList.add(window.IS_ADMIN ? 'is-admin' : 'read-only');
+    if (window.IS_TECNICO) {
+      document.body.classList.add('is-tecnico');
+      const rb = document.querySelector('.ro-banner');
+      if (rb) rb.innerHTML = '🛠️ <b>Perfil técnico:</b> podés cambiar <b>Postes, Gabinete, Energizado e Instalación de cámara</b>, cargar <b>fotos</b> y <b>observaciones</b> y enviar <b>Cambio de estado</b>. El resto es solo consulta.';
+    }
     if (xlsxResp.status === 401) { location.href = '/login'; return; }
     if (!xlsxResp.ok) throw new Error('HTTP ' + xlsxResp.status);
     const buf = await xlsxResp.arrayBuffer();

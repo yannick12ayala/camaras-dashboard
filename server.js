@@ -118,7 +118,7 @@ function readSession(req) {
   if (!data || data.e < Date.now()) return null;
   const u = DB.users[data.u];
   if (!u) return null;
-  return { username: data.u, isAdmin: !!u.isAdmin };
+  return { username: data.u, isAdmin: !!u.isAdmin, isTecnico: !u.isAdmin && !!u.isTecnico };
 }
 function setSessionCookie(res, user) {
   res.setHeader('Set-Cookie', `${COOKIE}=${makeSession(user)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL / 1000}`);
@@ -144,7 +144,7 @@ function readBody(req, limit = 25 * 1024 * 1024) {
     req.on('error', reject);
   });
 }
-async function readJson(req) { try { return JSON.parse((await readBody(req)).toString('utf8')); } catch { return {}; } }
+async function readJson(req) { if (req._jsonBody) return req._jsonBody; try { return JSON.parse((await readBody(req)).toString('utf8')); } catch { return {}; } }
 
 // ── Extraer hyperlinks de la columna "PDF URL" del xlsx ──
 // Devuelve {[id]: url}. Silenciosa: si algo falla, devuelve {}.
@@ -654,8 +654,19 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith('/api/admin/')) {
     if (!sess || !sess.isAdmin) return json(res, 403, { error: 'Solo el administrador' });
     if (m === 'GET' && url === '/api/admin/users') {
-      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, pending: !!DB.users[name].pending, isMain: name === ADMIN_USER }));
+      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, isTecnico: !!DB.users[name].isTecnico, pending: !!DB.users[name].pending, isMain: name === ADMIN_USER }));
       return json(res, 200, { users });
+    }
+    // Perfil "Técnico de campo": puede cambiar postes, gabinete, energizado, instalación de cámara,
+    // fotos, observaciones y enviar "Cambio de estado" en el Control de avance (nada más).
+    if (m === 'POST' && url === '/api/admin/set-tecnico') {
+      const body = await readJson(req);
+      const name = norm(body.user);
+      const u = DB.users[name];
+      if (!u) return json(res, 404, { error: 'No existe' });
+      u.isTecnico = !!body.isTecnico;
+      saveUsers();
+      return json(res, 200, { ok: true, user: name, isTecnico: u.isTecnico });
     }
     if (m === 'POST' && url === '/api/admin/set-admin') {
       const body = await readJson(req);
@@ -725,7 +736,7 @@ const server = http.createServer(async (req, res) => {
     return redirect(res, '/login');
   }
 
-  if (m === 'GET' && url === '/api/me') return json(res, 200, { user: sess.username, isAdmin: sess.isAdmin });
+  if (m === 'GET' && url === '/api/me') return json(res, 200, { user: sess.username, isAdmin: sess.isAdmin, isTecnico: sess.isTecnico });
   if (m === 'GET' && url === '/cuenta') return serveFile(res, 'cuenta.html', 'text/html; charset=utf-8');
   if (m === 'GET' && url === '/admin') { if (!sess.isAdmin) return redirect(res, '/'); return serveFile(res, 'admin.html', 'text/html; charset=utf-8'); }
   if (m === 'GET' && (url === '/isp' || url === '/isp.html')) return serveFile(res, 'isp.html', 'text/html; charset=utf-8');
@@ -734,9 +745,20 @@ const server = http.createServer(async (req, res) => {
   if (m === 'GET' && url === '/api/status') {
     return json(res, 200, loadStatuses());
   }
-  // Control de avance: solo los admin pueden modificar datos (estados, fotos, notificaciones).
+  // Control de avance: los admin modifican todo. Los "técnicos de campo" solo postes, gabinete,
+  // energizado, instalación de cámara (+ su motivo), observaciones, fotos y "Cambio de estado".
+  // Volver a PENDIENTE ('' ) sigue siendo solo de admin (salvo limpiar el motivo de sin servicio).
   if (m === 'POST' && (url === '/api/status' || url === '/api/status/notify' || url === '/api/photo') && !sess.isAdmin) {
-    return json(res, 403, { error: 'Solo un administrador puede modificar el Control de avance' });
+    if (!sess.isTecnico) return json(res, 403, { error: 'Solo un administrador puede modificar el Control de avance' });
+    if (url === '/api/status') {
+      const TEC_FIELDS = ['postes', 'gabineteEstado', 'gabineteEnergizado', 'estadoConect', 'motivoSinServicio', 'observacion'];
+      let peek = {};
+      try { peek = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
+      req._jsonBody = peek;
+      const f = String(peek.field || ''), v = peek.value == null ? '' : String(peek.value).trim();
+      if (!TEC_FIELDS.includes(f)) return json(res, 403, { error: 'Tu perfil no puede modificar ese dato' });
+      if (v === '' && f !== 'motivoSinServicio') return json(res, 403, { error: 'Solo un administrador puede volver a PENDIENTE' });
+    }
   }
 
   if (m === 'POST' && url === '/api/status') {
