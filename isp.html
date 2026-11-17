@@ -2008,7 +2008,7 @@ function openStateMenu(btn, title, values, field, onPick) {
   menu.innerHTML =
     '<div class="m-title">' + title + '</div>' +
     values.map(v => '<button data-state-val="' + v + '">' + (LABELS[v] || v) + '</button>').join('') +
-    '<div class="m-admin"><button class="m-reset" data-reset-field="' + field + '">🔁 Restablecer a PENDIENTE</button></div>';
+    (window.IS_ADMIN ? '<div class="m-admin"><button class="m-reset" data-reset-field="' + field + '">🔁 Restablecer a PENDIENTE</button></div>' : '');
   menu.querySelectorAll('[data-state-val]').forEach(b => {
     b.addEventListener('click', () => {
       const v = b.dataset.stateVal;
@@ -2181,7 +2181,7 @@ document.addEventListener('click', async (e) => {
         '<div class="m-title">Al instalar conectividad</div>' +
         CONECT_MOTIVOS.map(m2 => '<button data-conect-motivo="' + m2.key + '">' + m2.label + '</button>').join('') +
         // Admin-only: opción para restablecer el campo a PENDIENTE
-        '<div class="m-admin"><button class="m-reset" data-reset-field="conect">🔁 Restablecer a PENDIENTE</button></div>';
+        (window.IS_ADMIN ? '<div class="m-admin"><button class="m-reset" data-reset-field="conect">🔁 Restablecer a PENDIENTE</button></div>' : '');
       // Los botones del menú se ven con acento (accent), no bad
       menu.querySelectorAll('button').forEach(b => b.style.color = 'var(--ink)');
       wrap.appendChild(menu);
@@ -2255,7 +2255,7 @@ document.addEventListener('click', async (e) => {
     menu.innerHTML =
       '<div class="m-title">Instalación de cámara</div>' +
       MOTIVOS.map(m => '<button data-motivo="' + m.key + '">' + m.label + '</button>').join('') +
-      '<div class="m-admin"><button class="m-reset" data-reset-field="estadoConect">🔁 Restablecer a PENDIENTE</button></div>';
+      (window.IS_ADMIN ? '<div class="m-admin"><button class="m-reset" data-reset-field="estadoConect">🔁 Restablecer a PENDIENTE</button></div>' : '');
     wrap.appendChild(menu);
     return;
   }
@@ -2279,7 +2279,7 @@ document.addEventListener('click', async (e) => {
     menu.innerHTML =
       '<div class="m-title">QA — Validación</div>' +
       MOTIVOS.map(m => '<button data-motivo="' + m.key + '">' + m.label + '</button>').join('') +
-      '<div class="m-admin"><button class="m-reset" data-reset-field="qaEstado">🔁 Restablecer a PENDIENTE</button></div>';
+      (window.IS_ADMIN ? '<div class="m-admin"><button class="m-reset" data-reset-field="qaEstado">🔁 Restablecer a PENDIENTE</button></div>' : '');
     wrap.appendChild(menu);
     return;
   }
