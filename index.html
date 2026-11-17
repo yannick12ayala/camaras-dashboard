@@ -616,9 +616,7 @@
   <div class="section-label">Plan de instalación Fiberco</div>
   <div class="chart-card">
     <div class="chart-title">Gabinetes y postes por ISP <span style="color:var(--text2);font-weight:500;font-size:12px;letter-spacing:.04em;text-transform:uppercase;margin-left:6px">(alimentado por Control de avance)</span></div>
-    <div class="chart-subtitle">
-      Primero se instalan los <span style="color:#9b8afb;font-weight:600">■ gabinetes</span>, después los <span style="color:#22d3ee;font-weight:600">■ postes</span>
-    </div>
+    <div id="planLoteFilter" class="lote-filter" style="display:none;margin:10px 0 4px"></div>
     <div id="planFibercoGrid" class="plan-grid"></div>
   </div>
 
@@ -1039,22 +1037,23 @@ function processRows(rows) {
   const domosDobleInst = sumIfInst(k.domosDoble);
 
   // Plan de instalación Fiberco: etapa 1 gabinetes (puntos del plan), etapa 2 postes (unidades).
-  const plan = {};
+  // Se guarda un registro por punto (con su lote) para poder filtrar el cuadro por lote.
+  const planEntries = [];
   dataRows.forEach(r => {
     const st = SS[idOf(r)];
     const tipo = st && st.planFiberco && st.planFiberco.value;
     if (!tipo) return;
-    const isp = ispResolved(r) || 'SIN ISP';
-    const p = plan[isp] = plan[isp] || { puntos: 0, gabOk: 0, posTot: 0, posOk: 0, posPuntos: 0 };
-    p.puntos += 1;
-    if (stEq(r, 'gabineteEstado', 'si')) p.gabOk += 1;
+    const e = { isp: ispResolved(r) || 'SIN ISP', lote: (st.lote && st.lote.value) ? String(st.lote.value) : '',
+                gabOk: stEq(r, 'gabineteEstado', 'si') ? 1 : 0, posTot: 0, posOk: 0, posPuntos: 0 };
     if (tipo === 'gab_postes') {
       const c = n(r[k.col]) || 1;
-      p.posPuntos += 1; p.posTot += c;
-      if (stEq(r, 'postes', 'si')) p.posOk += c;
+      e.posPuntos = 1; e.posTot = c;
+      if (stEq(r, 'postes', 'si')) e.posOk = c;
     }
+    planEntries.push(e);
   });
-  renderPlanFiberco(plan);
+  window._PLAN_ENTRIES = planEntries;
+  renderPlanFiberco();
 
   buildCharts({
     total: sum(k.total), fijas: sum(k.fijas), lpr: sum(k.lpr), domos: sum(k.domos),
@@ -1857,9 +1856,31 @@ document.getElementById('ispFilter').addEventListener('click', (e) => {
 });
 
 // Tarjetas del plan Fiberco: una por ISP + total.
-function renderPlanFiberco(plan) {
+// Filtro de lote propio del cuadro: "Total" o un lote puntual.
+window.PLAN_LOTE = '__ALL__';
+function renderPlanFiberco() {
   const box = document.getElementById('planFibercoGrid');
   if (!box) return;
+  const entries = window._PLAN_ENTRIES || [];
+  const num = l => parseInt(String(l).replace(/\D/g, ''), 10) || 0;
+  const cnt = {};
+  entries.forEach(e => { cnt[e.lote] = (cnt[e.lote] || 0) + 1; });
+  if (window.PLAN_LOTE !== '__ALL__' && !(window.PLAN_LOTE in cnt)) window.PLAN_LOTE = '__ALL__';
+  const fb = document.getElementById('planLoteFilter');
+  if (fb) {
+    const lotes = Object.keys(cnt).filter(l => l).sort((a, b) => num(a) - num(b));
+    const b = (val, label, c) => `<button class="isp-filter-btn${window.PLAN_LOTE === val ? ' active' : ''}" data-plan-lote="${val}">${label} <span class="lote-cnt">${c}</span></button>`;
+    let html = '<span class="lote-filter-label">Lote</span>' + b('__ALL__', 'Total', entries.length);
+    lotes.forEach(l => { html += b(l, l, cnt[l]); });
+    if (cnt['']) html += b('', 'Sin lote', cnt['']);
+    fb.innerHTML = html;
+    fb.style.cssText = 'display:' + (entries.length ? 'flex' : 'none') + ';flex-wrap:wrap;gap:8px;margin:12px 0 4px';
+  }
+  const plan = {};
+  entries.filter(e => window.PLAN_LOTE === '__ALL__' || e.lote === window.PLAN_LOTE).forEach(e => {
+    const p = plan[e.isp] = plan[e.isp] || { puntos: 0, gabOk: 0, posTot: 0, posOk: 0, posPuntos: 0 };
+    p.puntos += 1; p.gabOk += e.gabOk; p.posTot += e.posTot; p.posOk += e.posOk; p.posPuntos += e.posPuntos;
+  });
   const orden = ['BIBOP', 'F2H', 'TELVISO', 'METROTEL'];
   const isps = Object.keys(plan).sort((a, b) => ((orden.indexOf(a) + 1) || 99) - ((orden.indexOf(b) + 1) || 99));
   if (!isps.length) { box.innerHTML = '<div class="plan-empty">No hay puntos del plan Fiberco para este filtro.</div>'; return; }
@@ -1879,6 +1900,13 @@ function renderPlanFiberco(plan) {
   isps.forEach(i => Object.keys(tot).forEach(f => tot[f] += plan[i][f]));
   box.innerHTML = isps.map(i => tarjeta(nombre[i] || i, plan[i])).join('') + (isps.length > 1 ? tarjeta('Total plan', tot, 'total') : '');
 }
+
+document.getElementById('planLoteFilter').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-plan-lote]');
+  if (!btn) return;
+  window.PLAN_LOTE = btn.dataset.planLote;
+  renderPlanFiberco();
+});
 
 // Sub-filtro por lote: aparece solo con un ISP elegido. "General" = todo el ISP.
 window.ACTIVE_LOTE = '__ALL__';
