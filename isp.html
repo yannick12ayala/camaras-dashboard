@@ -245,6 +245,17 @@ body.read-only.is-tecnico .observacion-input{pointer-events:auto; cursor:pointer
 body.read-only.is-tecnico .observacion-input{cursor:text}
 body.read-only.is-tecnico .notify-btn{display:inline-flex}
 body.read-only.is-tecnico .foto-modal .fm-upload{display:block}
+/* Usuario de ISP: postes, gabinete, energizado, conectividad ISP, N° de servicio, observaciones, fotos y Cambio de estado */
+body.read-only.is-isp-user .status[data-postes-id],
+body.read-only.is-isp-user .status[data-gabinete-id],
+body.read-only.is-isp-user .status[data-energizado-id],
+body.read-only.is-isp-user .status[data-conect-id],
+body.read-only.is-isp-user .num-servicio-input,
+body.read-only.is-isp-user .observacion-input{pointer-events:auto; cursor:pointer; opacity:1}
+body.read-only.is-isp-user .num-servicio-input,
+body.read-only.is-isp-user .observacion-input{cursor:text}
+body.read-only.is-isp-user .notify-btn{display:inline-flex}
+body.read-only.is-isp-user .foto-modal .fm-upload{display:block}
 
 /* Opción "Restablecer a PENDIENTE" en los menús desplegables — visible solo para admin.
    El CSS la oculta por default; body.is-admin la muestra. */
@@ -1620,7 +1631,9 @@ document.addEventListener('change', async (e) => {
 document.addEventListener('focusin', (e) => {
   if (window.IS_ADMIN) return;
   const t = e.target;
-  const bloqueados = window.IS_TECNICO
+  const bloqueados = window.USER_ISP
+    ? '.isp-input, .lote-input, .cantidad-mb-input, .id-dispositivo-input'
+    : window.IS_TECNICO
     ? '.isp-input, .lote-input, .num-servicio-input, .cantidad-mb-input, .id-dispositivo-input'
     : '.isp-input, .lote-input, .num-servicio-input, .cantidad-mb-input, .id-dispositivo-input, .observacion-input';
   if (t && t.matches && t.matches(bloqueados)) {
@@ -2140,14 +2153,14 @@ document.addEventListener('click', async (e) => {
   // ── Toggle Gabinete (SI/NO) — admin abre menú con opción de restablecer ──
   const gabBtn = e.target.closest && e.target.closest('[data-gabinete-id]');
   if (gabBtn) {
-    if (window.IS_ADMIN || window.IS_TECNICO) { openStateMenu(gabBtn, 'Gabinete', ['si','no'], 'gabineteEstado', v => setGabinete(gabBtn.dataset.gabineteId, v)); return; }
+    if (window.IS_ADMIN || window.IS_TECNICO || window.USER_ISP) { openStateMenu(gabBtn, 'Gabinete', ['si','no'], 'gabineteEstado', v => setGabinete(gabBtn.dataset.gabineteId, v)); return; }
     await toggleGabinete(gabBtn.dataset.gabineteId); return;
   }
 
   // ── Toggle Gabinete Energizado — mismo tratamiento ──
   const engBtn = e.target.closest && e.target.closest('[data-energizado-id]');
   if (engBtn) {
-    if (window.IS_ADMIN || window.IS_TECNICO) { openStateMenu(engBtn, 'Energizado', ['si','no'], 'gabineteEnergizado', v => setEnergizado(engBtn.dataset.energizadoId, v)); return; }
+    if (window.IS_ADMIN || window.IS_TECNICO || window.USER_ISP) { openStateMenu(engBtn, 'Energizado', ['si','no'], 'gabineteEnergizado', v => setEnergizado(engBtn.dataset.energizadoId, v)); return; }
     await toggleEnergizado(engBtn.dataset.energizadoId); return;
   }
 
@@ -2250,7 +2263,7 @@ document.addEventListener('click', async (e) => {
   // ── Toggle Postes (persistente en el server) — admin abre menú ──
   const postesId = btn.dataset.postesId;
   if (postesId) {
-    if (window.IS_ADMIN || window.IS_TECNICO) { openStateMenu(btn, 'Postes', ['si','no'], 'postes', v => setPostes(postesId, v)); return; }
+    if (window.IS_ADMIN || window.IS_TECNICO || window.USER_ISP) { openStateMenu(btn, 'Postes', ['si','no'], 'postes', v => setPostes(postesId, v)); return; }
     togglePostes(postesId); return;
   }
 
@@ -2326,7 +2339,7 @@ async function bootstrap() {
       const fI = document.getElementById('fISP'); if (fI) fI.style.display = 'none';
       const pm = document.getElementById('pmIsp'); if (pm) pm.style.display = 'none';
       const rb0 = document.querySelector('.ro-banner');
-      if (rb0) rb0.innerHTML = '🔒 <b>Usuario ' + window.USER_ISP + ':</b> ves solo los puntos asignados a ' + window.USER_ISP + '. Modo consulta.';
+      if (rb0) rb0.innerHTML = '🏢 <b>Usuario ' + window.USER_ISP + ':</b> ves solo tus puntos. Podés cambiar <b>Postes, Gabinete, Energizado, Conectividad ISP y N° de servicio</b>, cargar <b>fotos</b> y <b>observaciones</b> y enviar <b>Cambio de estado</b>. El resto es solo consulta.';
     }
     document.body.classList.add(window.IS_ADMIN ? 'is-admin' : 'read-only');
     if (window.IS_TECNICO) {

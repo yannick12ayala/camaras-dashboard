@@ -156,7 +156,7 @@
     if (!user) return;
     const isp = e.target.value;
     const ok = confirm(isp
-      ? '¿Limitar a "' + user + '" a los puntos de ' + isp + '?\n\nEn el dashboard y el Control de avance va a ver solo los puntos de ' + isp + ' (y si es técnico, solo podrá modificar esos).'
+      ? '¿Limitar a "' + user + '" a los puntos de ' + isp + '?\n\nEn el dashboard y el Control de avance va a ver solo los puntos de ' + isp + '. En esos puntos podrá cambiar postes, gabinete, energizado, conectividad ISP y N° de servicio, cargar fotos y observaciones y enviar Cambio de estado.'
       : '¿Quitar el límite de ISP a "' + user + '"? Va a ver todos los puntos.');
     if (!ok) { load(); return; }
     const d = await (await fetch('/api/admin/set-isp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user,isp})})).json();

@@ -827,15 +827,21 @@ const server = http.createServer(async (req, res) => {
   // energizado, instalación de cámara (+ su motivo), observaciones, fotos y "Cambio de estado".
   // Volver a PENDIENTE ('' ) sigue siendo solo de admin (salvo limpiar el motivo de sin servicio).
   if (m === 'POST' && (url === '/api/status' || url === '/api/status/notify' || url === '/api/photo') && !sess.isAdmin) {
-    if (!sess.isTecnico) return json(res, 403, { error: 'Solo un administrador puede modificar el Control de avance' });
+    // Usuarios de ISP: postes, gabinete, energizado, conectividad ISP (+ motivo), N° de servicio,
+    // observaciones, fotos y "Cambio de estado" — solo en los puntos de su ISP (se valida más abajo).
+    const ISP_FIELDS = ['postes', 'gabineteEstado', 'gabineteEnergizado', 'conect', 'motivoConect', 'numServicio', 'observacion'];
+    const TEC_FIELDS = ['postes', 'gabineteEstado', 'gabineteEnergizado', 'estadoConect', 'motivoSinServicio', 'observacion'];
+    if (!sess.isTecnico && !sess.isp) return json(res, 403, { error: 'Solo un administrador puede modificar el Control de avance' });
     if (url === '/api/status') {
-      const TEC_FIELDS = ['postes', 'gabineteEstado', 'gabineteEnergizado', 'estadoConect', 'motivoSinServicio', 'observacion'];
+      const allowed = new Set([...(sess.isTecnico ? TEC_FIELDS : []), ...(sess.isp ? ISP_FIELDS : [])]);
+      // Campos que se pueden dejar vacíos (borrar texto / limpiar motivo); el resto vacío = PENDIENTE (solo admin).
+      const canEmpty = new Set(['motivoSinServicio', ...(sess.isp ? ['motivoConect', 'numServicio', 'observacion'] : [])]);
       let peek = {};
       try { peek = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
       req._jsonBody = peek;
       const f = String(peek.field || ''), v = peek.value == null ? '' : String(peek.value).trim();
-      if (!TEC_FIELDS.includes(f)) return json(res, 403, { error: 'Tu perfil no puede modificar ese dato' });
-      if (v === '' && f !== 'motivoSinServicio') return json(res, 403, { error: 'Solo un administrador puede volver a PENDIENTE' });
+      if (!allowed.has(f)) return json(res, 403, { error: 'Tu perfil no puede modificar ese dato' });
+      if (v === '' && !canEmpty.has(f)) return json(res, 403, { error: 'Solo un administrador puede volver a PENDIENTE' });
     }
   }
 
