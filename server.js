@@ -118,7 +118,9 @@ function readSession(req) {
   if (!data || data.e < Date.now()) return null;
   const u = DB.users[data.u];
   if (!u) return null;
-  return { username: data.u, isAdmin: !!u.isAdmin, isTecnico: !u.isAdmin && !!u.isTecnico };
+  return { username: data.u, isAdmin: !!u.isAdmin, isTecnico: !u.isAdmin && !!u.isTecnico,
+           // Usuario de un ISP: solo ve (y, si es técnico, solo modifica) los puntos de ese ISP.
+           isp: (!u.isAdmin && ISP_LIST.includes(u.isp)) ? u.isp : '' };
 }
 function setSessionCookie(res, user) {
   res.setHeader('Set-Cookie', `${COOKIE}=${makeSession(user)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL / 1000}`);
@@ -254,6 +256,65 @@ function normalizeUpload(body) {
 function loadStatuses() {
   try { return JSON.parse(fs.readFileSync(STATUS_FILE, 'utf8')); } catch { return {}; }
 }
+// ─── Alcance por ISP ─────────────────────────────────────────
+// Un usuario con "isp" asignado solo recibe las filas/estados/fotos de los puntos de su ISP.
+// El ISP de un punto es el asignado en el panel (statuses[id].isp, incluso vacío) o, si no hay,
+// la columna ISP del Excel. El filtrado se hace en el servidor: el resto de los datos nunca sale.
+const ISP_LIST = ['BIBOP', 'F2H', 'TELVISO', 'METROTEL'];
+let _XL = null;
+const idOfCell = v => String(v == null ? '' : v).replace('.0', '').trim();
+function loadExcelAoa() {
+  try {
+    const st = fs.statSync(DATA_FILE);
+    if (_XL && _XL.mtime === st.mtimeMs) return _XL;
+    const XLSX = require('xlsx');
+    const wb = XLSX.read(fs.readFileSync(DATA_FILE), { type: 'buffer' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    const head = aoa[0] || [];
+    const ispIdx = head.findIndex(h => String(h == null ? '' : h).trim().toLowerCase() === 'isp');
+    _XL = { mtime: st.mtimeMs, aoa, ispIdx };
+    return _XL;
+  } catch (e) { console.log('[excel aoa] error:', e.message); return null; }
+}
+function idsForIsp(isp) {
+  const set = new Set(), seen = new Set();
+  const xl = loadExcelAoa(), ss = loadStatuses();
+  if (xl) for (let i = 1; i < xl.aoa.length; i++) {
+    const row = xl.aoa[i] || [];
+    const id = idOfCell(row[0]);
+    if (!/^\d{4}$/.test(id)) continue;
+    seen.add(id);
+    const ov = ss[id] && ss[id].isp;
+    const v = ov ? String(ov.value || '') : (xl.ispIdx >= 0 ? String(row[xl.ispIdx] == null ? '' : row[xl.ispIdx]) : '');
+    if (v.trim().toUpperCase() === isp) set.add(id);
+  }
+  // Puntos que solo existen en el panel (no están en el Excel)
+  for (const id of Object.keys(ss)) {
+    if (!seen.has(id) && ss[id] && ss[id].isp && String(ss[id].isp.value || '').trim().toUpperCase() === isp) set.add(id);
+  }
+  return set;
+}
+// Excel reducido: encabezado + solo las filas del ISP (hoja nueva, sin el resto de las hojas).
+function excelForIds(allowed) {
+  const XLSX = require('xlsx');
+  const xl = loadExcelAoa();
+  if (!xl) return null;
+  const out = [xl.aoa[0] || []];
+  for (let i = 1; i < xl.aoa.length; i++) {
+    const row = xl.aoa[i] || [];
+    if (allowed.has(idOfCell(row[0]))) out.push(row);
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(out), 'Datos');
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+}
+function pickIds(obj, allowed) {
+  const out = {};
+  for (const k of Object.keys(obj || {})) if (allowed.has(String(k))) out[k] = obj[k];
+  return out;
+}
+
 function saveStatuses(obj) {
   fs.mkdirSync(path.dirname(STATUS_FILE), { recursive: true });
   const tmp = STATUS_FILE + '.tmp';
@@ -654,7 +715,7 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith('/api/admin/')) {
     if (!sess || !sess.isAdmin) return json(res, 403, { error: 'Solo el administrador' });
     if (m === 'GET' && url === '/api/admin/users') {
-      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, isTecnico: !!DB.users[name].isTecnico, pending: !!DB.users[name].pending, isMain: name === ADMIN_USER }));
+      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, isTecnico: !!DB.users[name].isTecnico, isp: DB.users[name].isp || '', pending: !!DB.users[name].pending, isMain: name === ADMIN_USER }));
       return json(res, 200, { users });
     }
     // Perfil "Técnico de campo": puede cambiar postes, gabinete, energizado, instalación de cámara,
@@ -667,6 +728,19 @@ const server = http.createServer(async (req, res) => {
       u.isTecnico = !!body.isTecnico;
       saveUsers();
       return json(res, 200, { ok: true, user: name, isTecnico: u.isTecnico });
+    }
+    // Usuario de ISP: '' = ve todo; 'BIBOP' | 'F2H' | 'TELVISO' | 'METROTEL' = solo sus puntos.
+    if (m === 'POST' && url === '/api/admin/set-isp') {
+      const body = await readJson(req);
+      const name = norm(body.user);
+      const u = DB.users[name];
+      if (!u) return json(res, 404, { error: 'No existe' });
+      if (name === ADMIN_USER) return json(res, 400, { error: 'El admin principal no se puede limitar a un ISP' });
+      const isp = String(body.isp || '').trim().toUpperCase();
+      if (isp && !ISP_LIST.includes(isp)) return json(res, 400, { error: 'ISP inválido' });
+      if (isp) u.isp = isp; else delete u.isp;
+      saveUsers();
+      return json(res, 200, { ok: true, user: name, isp });
     }
     if (m === 'POST' && url === '/api/admin/set-admin') {
       const body = await readJson(req);
@@ -736,14 +810,18 @@ const server = http.createServer(async (req, res) => {
     return redirect(res, '/login');
   }
 
-  if (m === 'GET' && url === '/api/me') return json(res, 200, { user: sess.username, isAdmin: sess.isAdmin, isTecnico: sess.isTecnico });
+  if (m === 'GET' && url === '/api/me') return json(res, 200, { user: sess.username, isAdmin: sess.isAdmin, isTecnico: sess.isTecnico, isp: sess.isp });
+  // IDs visibles para un usuario de ISP (null = sin restricción). Se calcula una vez por request.
+  let _scope;
+  const scope = () => (_scope !== undefined ? _scope : (_scope = sess.isp ? idsForIsp(sess.isp) : null));
   if (m === 'GET' && url === '/cuenta') return serveFile(res, 'cuenta.html', 'text/html; charset=utf-8');
   if (m === 'GET' && url === '/admin') { if (!sess.isAdmin) return redirect(res, '/'); return serveFile(res, 'admin.html', 'text/html; charset=utf-8'); }
   if (m === 'GET' && (url === '/isp' || url === '/isp.html')) return serveFile(res, 'isp.html', 'text/html; charset=utf-8');
 
   // Estados persistentes (compartidos): quién marcó, cuándo
   if (m === 'GET' && url === '/api/status') {
-    return json(res, 200, loadStatuses());
+    const all = loadStatuses();
+    return json(res, 200, scope() ? pickIds(all, scope()) : all);
   }
   // Control de avance: los admin modifican todo. Los "técnicos de campo" solo postes, gabinete,
   // energizado, instalación de cámara (+ su motivo), observaciones, fotos y "Cambio de estado".
@@ -767,6 +845,7 @@ const server = http.createServer(async (req, res) => {
     const field = String(body.field || '').trim();
     const value = body.value == null ? '' : String(body.value).trim();
     if (!id || !field) return json(res, 400, { error: 'faltan id o field' });
+    if (scope() && !scope().has(id)) return json(res, 403, { error: 'Ese punto no pertenece a tu ISP' });
     // Campos permitidos: cerrados (lista de valores) o libres (texto acotado)
     const closed = {
       estadoConect: ['con', 'sin', ''],
@@ -926,6 +1005,7 @@ const server = http.createServer(async (req, res) => {
     let body = {}; try { body = JSON.parse(await readBody(req)); } catch {}
     const id = String(body.id || '').trim();
     if (!id) return json(res, 400, { error: 'falta id' });
+    if (scope() && !scope().has(id)) return json(res, 403, { error: 'Ese punto no pertenece a tu ISP' });
     const all = loadStatuses();
     const lastAt = all[id] && all[id].lastNotifiedAt ? all[id].lastNotifiedAt : null;
     // Ventana: últimos 15 minutos, pero nunca cambios ya notificados.
@@ -967,6 +1047,7 @@ const server = http.createServer(async (req, res) => {
       let entries = raw.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
       if (filterId)    entries = entries.filter(e => String(e.id) === filterId);
       if (filterField) entries = entries.filter(e => e.field === filterField);
+      if (scope()) entries = entries.filter(e => scope().has(String(e.id)));
       // Últimos 500 (más antiguos primero → los invertimos para mostrar los más nuevos arriba)
       return json(res, 200, entries.slice(-500).reverse());
     } catch (e) { return json(res, 500, { error: String(e) }); }
@@ -1001,6 +1082,7 @@ const server = http.createServer(async (req, res) => {
       if (info.size === 0) return json(res, 400, { error: 'archivo vacío' });
       const idClean = String(parts.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
       if (!idClean) return json(res, 400, { error: 'falta id' });
+      if (scope() && !scope().has(idClean)) return json(res, 403, { error: 'Ese punto no pertenece a tu ISP' });
       if (!info.mime || !info.mime.startsWith('image/')) return json(res, 400, { error: 'solo se aceptan imágenes' });
 
       const dir = path.join(PHOTOS_DIR, idClean);
@@ -1029,6 +1111,7 @@ const server = http.createServer(async (req, res) => {
       const q = new URLSearchParams((req.url.split('?')[1]) || '');
       const idClean = String(q.get('id') || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
       if (!idClean) return json(res, 400, { error: 'falta id' });
+      if (scope() && !scope().has(idClean)) return json(res, 403, { error: 'Ese punto no pertenece a tu ISP' });
       const dir = path.join(PHOTOS_DIR, idClean);
       if (!fs.existsSync(dir)) return json(res, 200, []);
       const files = fs.readdirSync(dir).filter(f => !f.endsWith('.json'));
@@ -1045,6 +1128,7 @@ const server = http.createServer(async (req, res) => {
     const parts = url.split('/').filter(Boolean); // ['photos', id, filename]
     if (parts.length !== 3) return json(res, 400, { error: 'ruta inválida' });
     const idClean = parts[1].replace(/[^A-Za-z0-9_-]/g, '');
+    if (scope() && !scope().has(idClean)) { res.writeHead(403); return res.end('sin acceso'); }
     const fileName = decodeURIComponent(parts[2]).replace(/[\\/]/g, '');
     const filePath = path.join(PHOTOS_DIR, idClean, fileName);
     if (!fs.existsSync(filePath)) { res.writeHead(404); return res.end('foto no encontrada'); }
@@ -1059,6 +1143,7 @@ const server = http.createServer(async (req, res) => {
   if (m === 'GET' && url === '/api/hyperlinks') {
     try {
       if (!fs.existsSync(LINKS_FILE)) return json(res, 200, {});
+      if (scope()) return json(res, 200, pickIds(JSON.parse(fs.readFileSync(LINKS_FILE, 'utf8')), scope()));
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(fs.readFileSync(LINKS_FILE));
     } catch (e) { return json(res, 500, { error: String(e) }); }
@@ -1066,6 +1151,12 @@ const server = http.createServer(async (req, res) => {
 
   if (m === 'GET' && url === '/api/data') {
     if (!fs.existsSync(DATA_FILE)) return json(res, 404, { error: 'Todavía no hay datos cargados' });
+    if (scope()) {
+      const buf = excelForIds(scope());
+      if (!buf) return json(res, 500, { error: 'No se pudo preparar los datos de tu ISP' });
+      res.writeHead(200, { 'Content-Type': XLSX_TYPE, 'Cache-Control': 'no-store' });
+      return res.end(buf);
+    }
     res.writeHead(200, { 'Content-Type': XLSX_TYPE, 'Cache-Control': 'no-store' });
     return res.end(fs.readFileSync(DATA_FILE));
   }

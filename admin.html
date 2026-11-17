@@ -36,6 +36,7 @@
   .act-btn{background:none;border:1px solid var(--border);color:var(--text2);border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;margin-left:6px}
   .act-btn:hover{border-color:var(--blue);color:var(--text)}
   .act-btn.del:hover{border-color:var(--coral);color:var(--coral)}
+  .isp-sel{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-size:12.5px}
   .err{color:var(--coral);font-size:12.5px;margin-top:.6rem;min-height:1em}
 </style>
 </head>
@@ -64,7 +65,7 @@
   <div class="panel">
     <h2>Perfiles</h2>
     <table>
-      <thead><tr><th>Usuario</th><th>Tipo</th><th>Estado</th><th style="text-align:right">Acciones</th></tr></thead>
+      <thead><tr><th>Usuario</th><th>Tipo</th><th title="Si se elige un ISP, el usuario solo ve los puntos de ese ISP">Ve ISP</th><th>Estado</th><th style="text-align:right">Acciones</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
@@ -99,7 +100,11 @@
                  + '<button class="act-btn" data-reset="'+u.user+'">Resetear clave</button>'
                  + '<button class="act-btn del" data-del="'+u.user+'">Borrar</button>';
       }
-      tr.innerHTML = '<td><b>'+u.user+'</b></td><td>'+tipo+'</td><td>'+estado+'</td><td style="text-align:right">'+acciones+'</td>';
+      const ISPS = [['','Todos'],['BIBOP','Bibop'],['F2H','F2H'],['TELVISO','Telviso'],['METROTEL','Metrotel']];
+      const ispSel = (u.isMain || u.isAdmin)
+        ? '<span style="color:var(--text2)">Todos</span>'
+        : '<select class="isp-sel" data-setisp="'+u.user+'">' + ISPS.map(([v,l]) => '<option value="'+v+'"'+((u.isp||'')===v?' selected':'')+'>'+l+'</option>').join('') + '</select>';
+      tr.innerHTML = '<td><b>'+u.user+'</b></td><td>'+tipo+'</td><td>'+ispSel+'</td><td>'+estado+'</td><td style="text-align:right">'+acciones+'</td>';
       rows.appendChild(tr);
     });
   }
@@ -144,6 +149,19 @@
       const d = await (await fetch('/api/admin/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:del})})).json();
       if(d.ok) load(); else alert(d.error||'Error');
     }
+  });
+
+  document.addEventListener('change', async e => {
+    const user = e.target.getAttribute('data-setisp');
+    if (!user) return;
+    const isp = e.target.value;
+    const ok = confirm(isp
+      ? '¿Limitar a "' + user + '" a los puntos de ' + isp + '?\n\nEn el dashboard y el Control de avance va a ver solo los puntos de ' + isp + ' (y si es técnico, solo podrá modificar esos).'
+      : '¿Quitar el límite de ISP a "' + user + '"? Va a ver todos los puntos.');
+    if (!ok) { load(); return; }
+    const d = await (await fetch('/api/admin/set-isp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user,isp})})).json();
+    if (!d.ok) alert(d.error||'Error');
+    load();
   });
 
   $('logout').onclick = async () => { await fetch('/api/logout',{method:'POST'}); location.href='/login'; };

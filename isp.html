@@ -2318,12 +2318,21 @@ async function bootstrap() {
       const me = meResp && meResp.ok ? await meResp.json() : null;
       window.IS_ADMIN = !!(me && me.isAdmin);
       window.IS_TECNICO = !window.IS_ADMIN && !!(me && me.isTecnico);
-    } catch { window.IS_ADMIN = false; window.IS_TECNICO = false; }
+      window.USER_ISP = (!window.IS_ADMIN && me && me.isp) ? me.isp : '';
+    } catch { window.IS_ADMIN = false; window.IS_TECNICO = false; window.USER_ISP = ''; }
+    // Usuario de un ISP: el servidor solo manda sus puntos; ocultamos los selectores de ISP.
+    if (window.USER_ISP) {
+      document.body.classList.add('is-isp-user');
+      const fI = document.getElementById('fISP'); if (fI) fI.style.display = 'none';
+      const pm = document.getElementById('pmIsp'); if (pm) pm.style.display = 'none';
+      const rb0 = document.querySelector('.ro-banner');
+      if (rb0) rb0.innerHTML = '🔒 <b>Usuario ' + window.USER_ISP + ':</b> ves solo los puntos asignados a ' + window.USER_ISP + '. Modo consulta.';
+    }
     document.body.classList.add(window.IS_ADMIN ? 'is-admin' : 'read-only');
     if (window.IS_TECNICO) {
       document.body.classList.add('is-tecnico');
       const rb = document.querySelector('.ro-banner');
-      if (rb) rb.innerHTML = '🛠️ <b>Perfil técnico:</b> podés cambiar <b>Postes, Gabinete, Energizado e Instalación de cámara</b>, cargar <b>fotos</b> y <b>observaciones</b> y enviar <b>Cambio de estado</b>. El resto es solo consulta.';
+      if (rb) rb.innerHTML = (window.USER_ISP ? '<b>' + window.USER_ISP + '</b> · solo tus puntos. ' : '') + '🛠️ <b>Perfil técnico:</b> podés cambiar <b>Postes, Gabinete, Energizado e Instalación de cámara</b>, cargar <b>fotos</b> y <b>observaciones</b> y enviar <b>Cambio de estado</b>. El resto es solo consulta.';
     }
     if (xlsxResp.status === 401) { location.href = '/login'; return; }
     if (!xlsxResp.ok) throw new Error('HTTP ' + xlsxResp.status);
@@ -2672,7 +2681,7 @@ setInterval(async () => {
     <h3>Exportar lotes</h3>
     <div class="exp-sub">Descargá un lote, varios o todos, en Excel o en PDF.</div>
     <label class="exp-lbl" for="expIsp">ISP</label>
-    <select id="expIsp">${EXP_ISPS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+    <select id="expIsp">${EXP_ISPS.filter(([v]) => !window.USER_ISP || v === '' || v === window.USER_ISP).map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>
     <label class="exp-lbl">Lotes</label>
     <div class="exp-lotes" id="expLotes"></div>
     <div class="exp-lotes-actions"><a id="expAll">Marcar todos</a><a id="expNone">Desmarcar todos</a></div>

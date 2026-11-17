@@ -502,6 +502,22 @@
     if(!d)return;
     document.getElementById('meUser').textContent = '👤 ' + d.user;
     if(d.isAdmin) document.getElementById('adminLink').hidden = false;
+    // Usuario de un ISP: el servidor ya manda solo sus puntos. Dejamos fijo su ISP
+    // (con el sub-filtro de lotes) y ocultamos los botones de los otros ISP.
+    if(d.isp){
+      window.USER_ISP = d.isp;
+      document.querySelectorAll('#ispFilter .isp-filter-btn').forEach(b => {
+        const v = b.dataset.isp;
+        if (v !== d.isp && v !== '__QA__') b.style.display = 'none';
+        b.classList.toggle('active', v === d.isp);
+      });
+      window.ACTIVE_ISP = d.isp; window.ACTIVE_LOTE = '__ALL__';
+      document.getElementById('meUser').textContent = '👤 ' + d.user + ' · ' + d.isp;
+      if (window.ALL_ROWS && window.ALL_ROWS.length && typeof processRows === 'function') {
+        if (typeof destroyCharts === 'function') destroyCharts();
+        processRows(window.ALL_ROWS);
+      }
+    }
   }).catch(()=>{});
   document.getElementById('logoutLink').onclick = async e => { e.preventDefault(); await fetch('/api/logout',{method:'POST'}); location.href='/login'; };
 </script>
@@ -1826,7 +1842,7 @@ setInterval(async () => {
 }, 60 * 1000);
 
 // Filtro global por ISP: al cliquear, marca el botón activo y re-procesa las filas
-window.ACTIVE_ISP = '__ALL__';
+window.ACTIVE_ISP = window.USER_ISP || '__ALL__';
 document.getElementById('ispFilter').addEventListener('click', (e) => {
   const btn = e.target.closest('.isp-filter-btn');
   if (!btn) return;
