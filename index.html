@@ -1869,7 +1869,7 @@ function renderPlanFiberco() {
   const fb = document.getElementById('planLoteFilter');
   if (fb) {
     const lotes = Object.keys(cnt).filter(l => l).sort((a, b) => num(a) - num(b));
-    const b = (val, label, c) => `<button class="isp-filter-btn${window.PLAN_LOTE === val ? ' active' : ''}" data-plan-lote="${val}">${label} <span class="lote-cnt">${c}</span></button>`;
+    const b = (val, label) => `<button class="isp-filter-btn${window.PLAN_LOTE === val ? ' active' : ''}" data-plan-lote="${val}">${label}</button>`;
     let html = '<span class="lote-filter-label">Lote</span>' + b('__ALL__', 'Total', entries.length);
     lotes.forEach(l => { html += b(l, l, cnt[l]); });
     if (cnt['']) html += b('', 'Sin lote', cnt['']);
@@ -1890,13 +1890,18 @@ function renderPlanFiberco() {
     return `<div class="plan-row"><div class="pr-top"><span>${lbl}</span><span><b>${ok}</b> / ${tot} · ${pct}%</span></div>
       <div class="plan-bar"><div style="width:${pct}%;background:${color}"></div></div></div>`;
   };
+  // Cupo contratado con Fiberco por ISP (Lote 1): 100 gabinetes = 100 enlaces.
+  // La meta de gabinetes es el cupo; si todavía faltan puntos por asignar, se indica.
+  const CUPO = { BIBOP: 33, F2H: 36, TELVISO: 22, METROTEL: 9 };
+  const usaCupo = window.PLAN_LOTE === '__ALL__' || /^lote\s*1$/i.test(window.PLAN_LOTE);
+  isps.forEach(i => { plan[i].meta = usaCupo && CUPO[i] ? Math.max(CUPO[i], plan[i].puntos) : plan[i].puntos; });
   const tarjeta = (titulo, p, cls) => `<div class="plan-card ${cls || ''}">
-    <h4>${titulo}<span>${p.puntos} puntos</span></h4>
-    ${fila('Gabinetes instalados', p.gabOk, p.puntos, '#9b8afb')}
+    <h4>${titulo}<span>${p.meta} gabinetes${p.meta > p.puntos ? ` · <b style="color:var(--amber,#f5a623)">${p.meta - p.puntos} sin asignar</b>` : ''}</span></h4>
+    ${fila('Gabinetes instalados', p.gabOk, p.meta, '#9b8afb')}
     ${p.posTot ? fila('Postes instalados', p.posOk, p.posTot, '#22d3ee')
                : '<div class="plan-row"><div class="pr-top"><span>Postes</span><span>no lleva</span></div></div>'}
   </div>`;
-  const tot = { puntos: 0, gabOk: 0, posTot: 0, posOk: 0, posPuntos: 0 };
+  const tot = { puntos: 0, gabOk: 0, posTot: 0, posOk: 0, posPuntos: 0, meta: 0 };
   isps.forEach(i => Object.keys(tot).forEach(f => tot[f] += plan[i][f]));
   box.innerHTML = isps.map(i => tarjeta(nombre[i] || i, plan[i])).join('') + (isps.length > 1 ? tarjeta('Total plan', tot, 'total') : '');
 }
