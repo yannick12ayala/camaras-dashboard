@@ -763,6 +763,9 @@ function initFromData(){
 for(const r of DATA){
   // Nuevo formato: la columna AJ ahora trae "lat, lon" combinado en una sola celda.
   // Detectamos el par y lo separamos; si no, caemos al parser tradicional (DMS o decimal simple).
+  // Corrección de ubicación cargada en el panel (manda sobre el Excel).
+  const cfix = window.SERVER_STATUS && window.SERVER_STATUS[r.id] && window.SERVER_STATUS[r.id].coords;
+  if (cfix && cfix.value) { r.coord = String(cfix.value); r.coord2 = ''; }
   const combo = String(r.coord || '').trim();
   const pair = combo.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
   if (pair) {

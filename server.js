@@ -638,7 +638,12 @@ const server = http.createServer(async (req, res) => {
         const id = String((it && it.id) || '').trim();
         const field = String((it && it.field) || '');
         const value = it && it.value != null ? String(it.value) : '';
-        if (!/^\d{4}$/.test(id) || !allowed[field] || !allowed[field].includes(value)) { rejected.push({ id, field, value }); continue; }
+        // coords: corrección de ubicación "lat, lon" (decimal, dentro de la zona de Pilar) que manda sobre el Excel; '' = quitar.
+        const coordsOk = field === 'coords' && (value === '' || (() => {
+          const m2 = value.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+          return !!m2 && +m2[1] > -35.5 && +m2[1] < -33.5 && +m2[2] > -60 && +m2[2] < -58;
+        })());
+        if (!/^\d{4}$/.test(id) || !(coordsOk || (allowed[field] && allowed[field].includes(value)))) { rejected.push({ id, field, value }); continue; }
         const cur = all[id] && all[id][field];
         const prev = cur ? cur.value : null;
         if (cur && prev === value) { same++; continue; }
