@@ -1706,7 +1706,10 @@ function updateMapFromRows(dataRows, keys) {
     const lonCol = latIdx >= 0 ? allK[latIdx+1] : allK.find(k=>k.includes('Unnamed') || k.includes('35'));
     // Nuevo formato: la celda de coord puede traer "lat, lon" combinado en un solo campo.
     let lat = null, lon = null;
-    const rawCoord = latCol ? String(r[latCol]||'').trim() : '';
+    // Corrección de ubicación cargada en el panel (manda sobre el Excel).
+    const _cid = String(r[allK[0]]||'').replace('.0','').trim();
+    const _cfix = (window.SERVER_STATUS||{})[_cid] && window.SERVER_STATUS[_cid].coords;
+    const rawCoord = (_cfix && _cfix.value) ? String(_cfix.value) : (latCol ? String(r[latCol]||'').trim() : '');
     const pair = rawCoord.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
     if (pair) {
       lat = parseFloat(pair[1]);
