@@ -667,6 +667,8 @@ const server = http.createServer(async (req, res) => {
         planOrden: ['', ...Array.from({ length: 200 }, (_, i) => String(i + 1))],
         // Punto UPGRADE: el ISP disponible en el lugar mejora un enlace (sin gabinete del plan Fiberco)
         upgrade: ['si', ''],
+        // Punto con ISP a reasignar (se quitó el ISP; en el mapa se pinta amarillo)
+        reasignar: ['si', ''],
       };
       const all = loadStatuses();
       const now = new Date().toISOString();
@@ -989,6 +991,7 @@ const server = http.createServer(async (req, res) => {
     closed.planFiberco = ['', 'gabinete', 'gab_postes'];
     closed.planOrden = ['', ...Array.from({ length: 200 }, (_, i) => String(i + 1))];
     closed.upgrade = ['si', ''];
+    closed.reasignar = ['si', ''];
     if (closed[field]) {
       if (!closed[field].includes(value)) return json(res, 400, { error: 'valor no permitido para ' + field });
     } else if (field in freeText) {

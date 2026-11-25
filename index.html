@@ -674,6 +674,7 @@
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#3ecf8e"></div>Cámara funcionando</div>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#22d3ee"></div>Con conectividad</div>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#9b6bff"></div>Gabinete instalado</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#facc15"></div>ISP a reasignar</div>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7"></div>Sin conectividad</div>
       <span style="flex-basis:100%;height:0"></span>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7;border-radius:2px;transform:rotate(45deg)"></div>Basural / Microbasural / Crónico / Coincidente</div>
@@ -1521,6 +1522,8 @@ let mapInstance = null;
 let allMarkers = [];
 
 function getMarkerColor(cam) {
+  // ISP a reasignar (marcado por planilla): amarillo, manda sobre cualquier otro estado.
+  if (cam.reasignar)           return '#facc15';
   // 4 estados: cámara funcionando (verde) > con conectividad (celeste) > gabinete instalado (violeta) > resto (gris)
   if (cam.estadoCam === 1)     return '#3ecf8e'; // verde  = cámara instalada y funcionando
   if (cam.conectividad === 1)  return '#22d3ee'; // celeste = con conectividad (todavía sin cámara)
@@ -1614,7 +1617,7 @@ function buildPopup(cam) {
   if (!cam.sinGabinete) rows += fRow('Inst. gabinete', fechaGab);
   rows += fRow('Inst. cámara', fechaCam);
 
-  rows += `<div class="popup-row"><span class="label">ISP</span><span class="value">${cam.isp || '—'}${cam.lote ? ' · ' + cam.lote : ''}</span></div>
+  rows += `<div class="popup-row"><span class="label">ISP</span><span class="value">${cam.isp || (cam.reasignar ? '<span class="popup-badge" style="background:rgba(250,204,21,0.15);color:#facc15">A reasignar</span>' : '—')}${cam.lote ? ' · ' + cam.lote : ''}</span></div>
     <div class="popup-row"><span class="label">Conectividad</span><span class="value">${conBadge}</span></div>`;
 
   if (cam.observaciones) rows += `<div class="popup-row"><span class="label">Obs.</span><span class="value" style="font-family:var(--font)">${cam.observaciones}</span></div>`;
@@ -1789,6 +1792,7 @@ function updateMapFromRows(dataRows, keys) {
       relevado: safeInt(r[keys.relevado]),
       instGabinete: portalGabinete ? 1 : (st ? 0 : safeInt(r[keys.instGab])),
       sinGabinete: !!(st && st.sinGabinete && st.sinGabinete.value === 'si'),
+      reasignar: !!(st && st.reasignar && st.reasignar.value === 'si'),
       lote: (st && st.lote && st.lote.value) ? String(st.lote.value) : '',
       // Fechas de instalación: cuándo se marcó "instalado" en el Control de avance
       // (si no hay dato en el portal, queda la fecha del Excel, si la hubiera).
