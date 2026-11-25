@@ -1574,6 +1574,15 @@ function formatDate(d) {
   return d;
 }
 
+// Fecha (dd/mm/aaaa) en que el campo quedó en el valor "instalado" en el Control de avance.
+function fechaPortal(st, field, okVal) {
+  const f = st && st[field];
+  if (!f) return null;                              // sin dato en el portal → se usa el Excel
+  if (f.value !== okVal || !f.at) return '';        // el portal dice "no instalado" → sin fecha
+  const d = new Date(f.at);
+  return isNaN(d) ? '' : d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 function buildPopup(cam) {
   const conBadge = cam.conectividad === 1
     ? '<span class="popup-badge badge-ok">✓ Activa</span>'
@@ -1597,9 +1606,11 @@ function buildPopup(cam) {
     <div class="popup-row"><span class="label">Gabinete</span><span class="value">${cam.sinGabinete ? '<span class="popup-badge" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px dashed rgba(167,139,250,0.5)">No lleva</span>' : gabBadge}</span></div>
     <div class="popup-row"><span class="label">Cámara</span><span class="value">${camBadge}</span></div>`;
 
-  if (fechaGab !== '—') rows += `<div class="popup-row"><span class="label">Fecha gabinete</span><span class="value">${fechaGab}</span></div>`;
-  if (fechaCol !== '—') rows += `<div class="popup-row"><span class="label">Fecha columna</span><span class="value">${fechaCol}</span></div>`;
-  if (fechaCam !== '—') rows += `<div class="popup-row"><span class="label">Fecha cámara</span><span class="value">${fechaCam}</span></div>`;
+  // Fechas de instalación (del botón "instalado" de cada uno en el Control de avance); "—" = pendiente.
+  const fRow = (lbl, f) => `<div class="popup-row"><span class="label">${lbl}</span><span class="value"${f === '—' ? ' style="color:var(--text3,#555a70)"' : ''}>${f}</span></div>`;
+  rows += fRow('Inst. poste', fechaCol);
+  if (!cam.sinGabinete) rows += fRow('Inst. gabinete', fechaGab);
+  rows += fRow('Inst. cámara', fechaCam);
 
   rows += `<div class="popup-row"><span class="label">ISP</span><span class="value">${cam.isp || '—'}${cam.lote ? ' · ' + cam.lote : ''}</span></div>
     <div class="popup-row"><span class="label">Conectividad</span><span class="value">${conBadge}</span></div>`;
@@ -1777,9 +1788,11 @@ function updateMapFromRows(dataRows, keys) {
       instGabinete: portalGabinete ? 1 : (st ? 0 : safeInt(r[keys.instGab])),
       sinGabinete: !!(st && st.sinGabinete && st.sinGabinete.value === 'si'),
       lote: (st && st.lote && st.lote.value) ? String(st.lote.value) : '',
-      fechaGabinete: safe(r[keys.fechaGab]||''),
-      fechaColumna: safe(r[keys.fechaCol]||''),
-      fechaCamara: safe(r[keys.fechaCam]||''),
+      // Fechas de instalación: cuándo se marcó "instalado" en el Control de avance
+      // (si no hay dato en el portal, queda la fecha del Excel, si la hubiera).
+      fechaGabinete: fechaPortal(st, 'gabineteEstado', 'si') ?? safe(r[keys.fechaGab]||''),
+      fechaColumna:  fechaPortal(st, 'postes', 'si')         ?? safe(r[keys.fechaCol]||''),
+      fechaCamara:   fechaPortal(st, 'estadoConect', 'con')  ?? safe(r[keys.fechaCam]||''),
       observaciones: safe(r[keys.obs]||''),
       mb: safe(r[keys.mb]||''),
       probConect: safeInt(r[keys.probConect]||0),
