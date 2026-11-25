@@ -1537,8 +1537,8 @@ function makeSVGIcon(color) {
 }
 
 // Puntos especiales (basural/microbasural/crónico/coincidente): un mismo icono
-// gris con forma de rombo, distinto del pin común. La categoría se diferencia por
-// la dirección (y el estado por el popup).
+// con forma de rombo, distinto del pin común, pintado con el color de su estado
+// (verde funcionando / celeste con conectividad / gris sin conectividad).
 function getCategoria(cam) {
   const d = (cam.direccion || '').trim().toLowerCase();
   if (d.startsWith('microbasural')) return 'microbasural';
@@ -1547,9 +1547,9 @@ function getCategoria(cam) {
   if (d.startsWith('coincid'))      return 'coincidente';
   return null;
 }
-function makeCategoryIcon() {
+function makeCategoryIcon(color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="30" viewBox="0 0 26 30">
-    <path d="M13 0 L26 13 L13 30 L0 13 Z" fill="#8b90a7" stroke="white" stroke-width="1.6"/>
+    <path d="M13 0 L26 13 L13 30 L0 13 Z" fill="${color || '#8b90a7'}" stroke="white" stroke-width="1.6"/>
     <circle cx="13" cy="13" r="3.6" fill="white"/>
   </svg>`;
   return L.divIcon({ html: svg, className: '', iconSize: [26,30], iconAnchor: [13,30], popupAnchor: [0,-30] });
@@ -1649,7 +1649,7 @@ function initMap(cameras) {
 
   cameras.forEach(cam => {
     const cat = getCategoria(cam);
-    const icon = cat ? makeCategoryIcon()
+    const icon = cat ? makeCategoryIcon(getMarkerColor(cam))
                : (cam.lpr > 0 ? makeLprIcon(getMarkerColor(cam)) : makeSVGIcon(getMarkerColor(cam)));
     const marker = L.marker([cam.lat, cam.lon], { icon })
       .bindPopup(buildPopup(cam), { maxWidth: 280 });
