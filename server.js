@@ -356,6 +356,30 @@ function getMailer() {
     return null;
   }
 }
+// ── Mails de cuenta (mail propio de cada usuario: aviso de cambio de clave y recuperación) ──
+const EMAIL_RE = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]{2,}$/;
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function maskEmail(e) {
+  const [a, d] = String(e).split('@');
+  return (a.length <= 2 ? a[0] + '*' : a.slice(0, 2) + '*'.repeat(Math.min(6, a.length - 2))) + '@' + d;
+}
+async function sendUserMail(to, subject, bodyHtml) {
+  const mailer = getMailer();
+  if (!mailer || !to) return false;
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1e293b;max-width:520px">
+    <h2 style="font-size:17px;margin:0 0 12px">Proyecto Cámaras V — Municipalidad de Pilar</h2>${bodyHtml}
+    <p style="color:#64748b;font-size:12px;margin-top:22px">Mail automático del dashboard (${escHtml(DASHBOARD_URL)}). No respondas este mensaje.</p></div>`;
+  try { await mailer.sendMail({ from: SMTP_FROM, to, subject, html }); return true; }
+  catch (e) { console.log('[mail cuenta] error:', e.message); return false; }
+}
+const fechaAR = () => new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+function avisoCambioClave(user, u) {
+  if (!u.email) return;
+  sendUserMail(u.email, 'Tu contraseña fue cambiada — Cámaras V',
+    `<p>Hola <b>${escHtml(user)}</b>:</p><p>La contraseña de tu usuario fue cambiada el <b>${fechaAR()}</b>.</p>
+     <p>Si no fuiste vos, avisale de inmediato al administrador para que la resetee.</p>`);
+}
+
 const MOTIVO_LABEL = {
   onu_alarmada:       'ONU alarmada',
   fibra_cortada:      'Fibra cortada',
@@ -702,14 +726,59 @@ const server = http.createServer(async (req, res) => {
   if (m === 'POST' && url === '/api/activate') {
     const body = await readJson(req);
     const user = norm(body.user), code = body.code, newPass = body.newPass;
+    const email = String(body.email || '').trim().toLowerCase();
     const u = DB.users[user];
     if (!u || !u.pending) return json(res, 400, { error: 'Esta cuenta no está pendiente de activación' });
     if (!checkSecretField(u, 'code', (code || '').trim())) return json(res, 401, { error: 'Código de activación incorrecto' });
     if (!newPass || String(newPass).length < 6) return json(res, 400, { error: 'La contraseña debe tener al menos 6 caracteres' });
+    if (email && (email.length > 120 || !EMAIL_RE.test(email))) return json(res, 400, { error: 'El mail no es válido' });
     setSecretField(u, 'pass', newPass);
     u.pending = false; delete u.codeHash; delete u.codeSalt;
+    if (email) u.email = email;
     saveUsers();
     setSessionCookie(res, user);
+    if (email) sendUserMail(email, 'Mail registrado — Cámaras V',
+      `<p>Hola <b>${escHtml(user)}</b>:</p><p>Este mail quedó registrado en tu usuario. Lo vamos a usar para avisarte cuando cambie tu contraseña y para mandarte un código si la olvidás.</p>`);
+    return json(res, 200, { ok: true });
+  }
+
+  // ── Recuperar contraseña: se manda un código de 6 dígitos al mail del usuario (vale 30 min) ──
+  if (m === 'POST' && url === '/api/forgot') {
+    const user = norm((await readJson(req)).user);
+    const u = DB.users[user];
+    const generic = { ok: true, msg: 'Si el usuario tiene un mail registrado, le enviamos un código. Revisá tu correo (también el spam).' };
+    if (!u || u.pending || !u.email) return json(res, 200, generic);
+    if (!getMailer()) return json(res, 503, { error: 'El envío de mails no está configurado. Pedile al administrador que te resetee la clave.' });
+    if (u.resetSent && Date.now() - u.resetSent < 60 * 1000) return json(res, 200, generic);
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    setSecretField(u, 'reset', code);
+    u.resetExp = Date.now() + 30 * 60 * 1000; u.resetSent = Date.now(); u.resetTries = 0;
+    saveUsers();
+    sendUserMail(u.email, 'Código para cambiar tu contraseña — Cámaras V',
+      `<p>Hola <b>${escHtml(user)}</b>:</p><p>Pediste cambiar tu contraseña. Tu código es:</p>
+       <p style="font-size:26px;font-weight:700;letter-spacing:6px;margin:10px 0">${code}</p>
+       <p>Vale por 30 minutos. Ingresalo en la pantalla de ingreso, en "¿Olvidaste tu contraseña?".</p>
+       <p>Si no lo pediste vos, ignorá este mail: tu contraseña no cambia.</p>`);
+    return json(res, 200, generic);
+  }
+  if (m === 'POST' && url === '/api/reset-password') {
+    const body = await readJson(req);
+    const user = norm(body.user), code = String(body.code || '').trim(), newPass = body.newPass;
+    const u = DB.users[user];
+    const bad = { error: 'Código incorrecto o vencido. Pedí uno nuevo.' };
+    if (!u || !u.resetHash || !u.resetExp || u.resetExp < Date.now()) return json(res, 400, bad);
+    if (!checkSecretField(u, 'reset', code)) {
+      u.resetTries = (u.resetTries || 0) + 1;
+      if (u.resetTries >= 5) { delete u.resetHash; delete u.resetSalt; delete u.resetExp; }
+      saveUsers();
+      return json(res, 400, bad);
+    }
+    if (!newPass || String(newPass).length < 6) return json(res, 400, { error: 'La contraseña debe tener al menos 6 caracteres' });
+    setSecretField(u, 'pass', newPass);
+    delete u.resetHash; delete u.resetSalt; delete u.resetExp; delete u.resetTries;
+    saveUsers();
+    setSessionCookie(res, user);
+    avisoCambioClave(user, u);
     return json(res, 200, { ok: true });
   }
 
@@ -725,13 +794,30 @@ const server = http.createServer(async (req, res) => {
     if (!u || !checkSecretField(u, 'pass', currentPass || '')) return json(res, 401, { error: 'Contraseña actual incorrecta' });
     if (!newPass || String(newPass).length < 6) return json(res, 400, { error: 'La nueva contraseña debe tener al menos 6 caracteres' });
     setSecretField(u, 'pass', newPass); saveUsers();
-    return json(res, 200, { ok: true });
+    avisoCambioClave(sess.username, u);
+    return json(res, 200, { ok: true, mailed: !!(u.email && getMailer()) });
+  }
+
+  // Mail propio del usuario (para aviso de cambio de clave y recuperación). '' = quitarlo.
+  if (m === 'POST' && url === '/api/account/email') {
+    if (!sess) return json(res, 401, { error: 'No autenticado' });
+    const email = String((await readJson(req)).email || '').trim().toLowerCase();
+    if (email && (email.length > 120 || !EMAIL_RE.test(email))) return json(res, 400, { error: 'El mail no es válido' });
+    const u = DB.users[sess.username];
+    const prev = u.email || '';
+    if (email) u.email = email; else delete u.email;
+    saveUsers();
+    if (email && email !== prev) sendUserMail(email, 'Mail registrado — Cámaras V',
+      `<p>Hola <b>${escHtml(sess.username)}</b>:</p><p>Este mail quedó registrado en tu usuario. Lo vamos a usar para avisarte cuando cambie tu contraseña y para mandarte un código si la olvidás.</p>`);
+    if (prev && prev !== email) sendUserMail(prev, 'Cambió el mail de tu usuario — Cámaras V',
+      `<p>Hola <b>${escHtml(sess.username)}</b>:</p><p>El mail de tu usuario ${email ? 'se cambió a <b>' + escHtml(maskEmail(email)) + '</b>' : 'fue quitado'} el ${fechaAR()}.</p><p>Si no fuiste vos, avisale al administrador.</p>`);
+    return json(res, 200, { ok: true, email, mailOn: !!getMailer() });
   }
 
   if (url.startsWith('/api/admin/')) {
     if (!sess || !sess.isAdmin) return json(res, 403, { error: 'Solo el administrador' });
     if (m === 'GET' && url === '/api/admin/users') {
-      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, isTecnico: !!DB.users[name].isTecnico, isp: DB.users[name].isp || '', pending: !!DB.users[name].pending, isMain: name === ADMIN_USER }));
+      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, isTecnico: !!DB.users[name].isTecnico, isp: DB.users[name].isp || '', email: DB.users[name].email || '', pending: !!DB.users[name].pending, isMain: name === ADMIN_USER }));
       return json(res, 200, { users });
     }
     // Perfil "Técnico de campo": puede cambiar postes, gabinete, energizado, instalación de cámara,
@@ -826,7 +912,7 @@ const server = http.createServer(async (req, res) => {
     return redirect(res, '/login');
   }
 
-  if (m === 'GET' && url === '/api/me') return json(res, 200, { user: sess.username, isAdmin: sess.isAdmin, isTecnico: sess.isTecnico, isp: sess.isp });
+  if (m === 'GET' && url === '/api/me') return json(res, 200, { user: sess.username, isAdmin: sess.isAdmin, isTecnico: sess.isTecnico, isp: sess.isp, email: (DB.users[sess.username] || {}).email || '', mailOn: !!SMTP_HOST });
   // IDs visibles para un usuario de ISP (null = sin restricción). Se calcula una vez por request.
   let _scope;
   const scope = () => (_scope !== undefined ? _scope : (_scope = sess.isp ? idsForIsp(sess.isp) : null));

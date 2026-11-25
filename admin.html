@@ -104,7 +104,8 @@
       const ispSel = (u.isMain || u.isAdmin)
         ? '<span style="color:var(--text2)">Todos</span>'
         : '<select class="isp-sel" data-setisp="'+u.user+'">' + ISPS.map(([v,l]) => '<option value="'+v+'"'+((u.isp||'')===v?' selected':'')+'>'+l+'</option>').join('') + '</select>';
-      tr.innerHTML = '<td><b>'+u.user+'</b></td><td>'+tipo+'</td><td>'+ispSel+'</td><td>'+estado+'</td><td style="text-align:right">'+acciones+'</td>';
+      const mail = u.email ? '<div style="font-size:11.5px;color:var(--text2);margin-top:2px">'+u.email.replace(/[&<>"]/g,'')+'</div>' : '<div style="font-size:11.5px;color:var(--amber);margin-top:2px">sin mail</div>';
+      tr.innerHTML = '<td><b>'+u.user+'</b>'+mail+'</td><td>'+tipo+'</td><td>'+ispSel+'</td><td>'+estado+'</td><td style="text-align:right">'+acciones+'</td>';
       rows.appendChild(tr);
     });
   }

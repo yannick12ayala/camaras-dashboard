@@ -46,7 +46,27 @@
     <input id="lp" type="password" autocomplete="current-password">
     <div class="err" id="loginErr"></div>
     <button type="submit">Ingresar</button>
-    <a href="#" id="toActivate" class="link">¿Primera vez? Activá tu cuenta</a>
+    <a href="#" id="toForgot" class="link">¿Olvidaste tu contraseña?</a>
+    <a href="#" id="toActivate" class="link" style="margin-top:.5rem">¿Primera vez? Activá tu cuenta</a>
+  </form>
+
+  <form id="fgForm" hidden>
+    <div class="sub2">Te mandamos un código al mail que tengas registrado en tu usuario.</div>
+    <label for="fu">Usuario</label>
+    <input id="fu" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+    <div class="err" id="fgErr"></div>
+    <button type="submit" id="fgSend">Enviarme el código</button>
+    <div id="fgStep2" hidden>
+      <label for="fc">Código recibido por mail</label>
+      <input id="fc" inputmode="numeric" maxlength="6" placeholder="6 dígitos">
+      <label for="fp1">Nueva contraseña</label>
+      <input id="fp1" type="password" autocomplete="new-password">
+      <label for="fp2">Repetir contraseña</label>
+      <input id="fp2" type="password" autocomplete="new-password">
+      <div class="err" id="fgErr2"></div>
+      <button type="button" id="fgReset">Cambiar contraseña y entrar</button>
+    </div>
+    <a href="#" class="link toLogin">Volver al ingreso</a>
   </form>
 
   <form id="actForm" hidden>
@@ -59,6 +79,8 @@
     <input id="ap1" type="password" autocomplete="new-password">
     <label for="ap2">Repetir contraseña</label>
     <input id="ap2" type="password" autocomplete="new-password">
+    <label for="aem">Tu mail (opcional, para recuperar la contraseña)</label>
+    <input id="aem" type="email" autocomplete="email" placeholder="nombre@ejemplo.com">
     <div class="err" id="actErr"></div>
     <button type="submit">Activar y entrar</button>
     <a href="#" id="toLogin" class="link">Volver al ingreso</a>
@@ -66,9 +88,30 @@
 </div>
 <script>
   const $ = id => document.getElementById(id);
-  const show = which => { $('loginForm').hidden = which!=='login'; $('actForm').hidden = which!=='act'; };
+  const show = which => { $('loginForm').hidden = which!=='login'; $('actForm').hidden = which!=='act'; $('fgForm').hidden = which!=='fg'; };
   $('toActivate').onclick = e => { e.preventDefault(); $('au').value = $('lu').value.trim(); show('act'); };
   $('toLogin').onclick   = e => { e.preventDefault(); show('login'); };
+  document.querySelectorAll('.toLogin').forEach(a => a.onclick = e => { e.preventDefault(); show('login'); });
+  $('toForgot').onclick  = e => { e.preventDefault(); $('fu').value = $('lu').value.trim(); show('fg'); };
+
+  $('fgForm').onsubmit = async e => {
+    e.preventDefault(); const er = $('fgErr'); er.className='err'; er.textContent='';
+    if (!$('fu').value.trim()) { er.textContent='Ingresá tu usuario'; return; }
+    const r = await fetch('/api/forgot', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:$('fu').value.trim()})});
+    const d = await r.json();
+    if (!d.ok) { er.textContent = d.error || 'Error'; return; }
+    er.className='err ok'; er.textContent = d.msg + ' Si no tenés mail cargado, pedile al administrador que te resetee la clave.';
+    $('fgSend').textContent = 'Reenviar código'; $('fgStep2').hidden = false; $('fc').focus();
+  };
+  $('fgReset').onclick = async () => {
+    const er = $('fgErr2'); er.textContent='';
+    if ($('fp1').value !== $('fp2').value) { er.textContent='Las contraseñas no coinciden'; return; }
+    if ($('fp1').value.length < 6) { er.textContent='La contraseña debe tener al menos 6 caracteres'; return; }
+    const r = await fetch('/api/reset-password', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:$('fu').value.trim(),code:$('fc').value.trim(),newPass:$('fp1').value})});
+    const d = await r.json();
+    if (d.ok) { location.href='/'; return; }
+    er.textContent = d.error || 'Error';
+  };
 
   $('loginForm').onsubmit = async e => {
     e.preventDefault(); $('loginErr').textContent = '';
@@ -83,7 +126,7 @@
     e.preventDefault(); $('actErr').textContent = '';
     if ($('ap1').value !== $('ap2').value) { $('actErr').textContent = 'Las contraseñas no coinciden'; return; }
     if ($('ap1').value.length < 6) { $('actErr').textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
-    const r = await fetch('/api/activate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:$('au').value.trim(),code:$('ac').value.trim(),newPass:$('ap1').value})});
+    const r = await fetch('/api/activate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:$('au').value.trim(),code:$('ac').value.trim(),newPass:$('ap1').value,email:$('aem').value.trim()})});
     const d = await r.json();
     if (d.ok) { location.href='/'; return; }
     $('actErr').textContent = d.error || 'Error al activar';

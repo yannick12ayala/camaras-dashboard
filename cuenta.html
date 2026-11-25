@@ -21,6 +21,9 @@
   .err{color:var(--coral)} .ok{color:var(--green)}
   .row{display:flex;gap:12px;justify-content:space-between;margin-top:1.4rem;font-size:12.5px}
   .row a{color:var(--blue);text-decoration:none} .row a:hover{text-decoration:underline}
+  .sec{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-top:.4rem}
+  #pwForm{border-top:1px solid var(--border);margin-top:1.4rem;padding-top:1.2rem}
+  .hint{font-size:12px;color:var(--text2);line-height:1.45;margin-top:.4rem}
   .logout{color:var(--coral)!important;background:none;border:0;cursor:pointer;font:inherit;padding:0}
 </style>
 </head>
@@ -29,7 +32,17 @@
   <h1>Mi cuenta</h1>
   <div class="who">Sesión iniciada como <b id="who">…</b> <span id="adminTag"></span></div>
 
+  <form id="mailForm">
+    <h2 class="sec">Mi mail</h2>
+    <div class="hint">Te avisamos ahí cuando cambie tu contraseña, y si la olvidás te mandamos un código para crear una nueva.</div>
+    <label for="em">Mail</label>
+    <input id="em" type="email" autocomplete="email" placeholder="nombre@ejemplo.com">
+    <div class="msg err" id="emMsg"></div>
+    <button type="submit">Guardar mail</button>
+  </form>
+
   <form id="pwForm">
+    <h2 class="sec">Cambiar contraseña</h2>
     <label for="cur">Contraseña actual</label>
     <input id="cur" type="password" autocomplete="current-password">
     <label for="np1">Nueva contraseña</label>
@@ -51,7 +64,17 @@
   fetch('/api/me').then(r=>r.json()).then(d=>{
     $('who').textContent = d.user || '';
     if (d.isAdmin) { $('adminTag').textContent='(admin)'; $('adminRow').hidden=false; }
+    $('em').value = d.email || '';
+    if (!d.email) { $('emMsg').className='msg'; $('emMsg').style.color='#f5a623'; $('emMsg').textContent='Todavía no cargaste un mail: sin él no vas a poder recuperar la contraseña.'; }
   });
+  $('mailForm').onsubmit = async e => {
+    e.preventDefault();
+    const msg = $('emMsg'); msg.style.color=''; msg.className='msg err'; msg.textContent='';
+    const r = await fetch('/api/account/email', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('em').value.trim()})});
+    const d = await r.json();
+    if (d.ok) { msg.className='msg ok'; msg.textContent = d.email ? ('✓ Mail guardado' + (d.mailOn ? '. Te mandamos un mail de confirmación.' : '')) : '✓ Mail quitado'; }
+    else msg.textContent = d.error || 'Error';
+  };
   $('pwForm').onsubmit = async e => {
     e.preventDefault();
     const msg = $('msg'); msg.className='msg err'; msg.textContent='';
@@ -59,7 +82,7 @@
     if ($('np1').value.length < 6) { msg.textContent='La nueva contraseña debe tener al menos 6 caracteres'; return; }
     const r = await fetch('/api/change-password', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPass:$('cur').value,newPass:$('np1').value})});
     const d = await r.json();
-    if (d.ok) { msg.className='msg ok'; msg.textContent='✓ Contraseña cambiada'; $('pwForm').reset(); }
+    if (d.ok) { msg.className='msg ok'; msg.textContent='✓ Contraseña cambiada' + (d.mailed ? '. Te enviamos un aviso a tu mail.' : ''); $('pwForm').reset(); }
     else { msg.textContent = d.error || 'Error'; }
   };
   $('logout').onclick = async () => { await fetch('/api/logout',{method:'POST'}); location.href='/login'; };
