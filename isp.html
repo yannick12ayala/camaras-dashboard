@@ -861,7 +861,12 @@ function getPlan(id) {
 }
 function planCell(id) {
   const p = getPlan(id);
-  if (!p.tipo) return '<td class="plan-col"><span class="plan-none">—</span></td>';
+  if (!p.tipo) {
+    const su = window.SERVER_STATUS && window.SERVER_STATUS[id];
+    if (su && su.upgrade && su.upgrade.value === 'si')
+      return '<td class="plan-col"><span class="plan-badge" style="background:rgba(34,211,238,.14);color:#22d3ee;border-color:rgba(34,211,238,.35)" title="Punto UPGRADE: el ISP disponible en el lugar mejora el enlace (sin gabinete del plan Fiberco)"><b>UPGRADE</b></span></td>';
+    return '<td class="plan-col"><span class="plan-none">—</span></td>';
+  }
   const st = window.SERVER_STATUS[id] || {};
   const gabOk = st.gabineteEstado && st.gabineteEstado.value === 'si';
   const posOk = st.postes && st.postes.value === 'si';

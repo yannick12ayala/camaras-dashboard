@@ -620,6 +620,15 @@
     <div id="planFibercoGrid" class="plan-grid"></div>
   </div>
 
+  <!-- UPGRADE: puntos sin gabinete del plan donde el ISP disponible en el lugar mejora el enlace -->
+  <div id="upgradeSection" style="display:none">
+    <div class="section-label">Upgrade por ISP</div>
+    <div class="chart-card">
+      <div class="chart-title">Puntos UPGRADE <span style="color:var(--text2);font-weight:500;font-size:12px;letter-spacing:.04em;text-transform:uppercase;margin-left:6px">(alimentado por Control de avance)</span></div>
+      <div id="upgradeGrid" class="plan-grid" style="margin-top:12px"></div>
+    </div>
+  </div>
+
   <!-- AVANCE DE CONECTIVIDAD POR ISP (viene del portal ISP) -->
   <div class="section-label">Avance de conectividad por ISP</div>
   <div class="chart-card">
@@ -1054,6 +1063,20 @@ function processRows(rows) {
   });
   window._PLAN_ENTRIES = planEntries;
   renderPlanFiberco();
+
+  // UPGRADE: puntos donde el ISP disponible en el lugar mejora el enlace (marcados con upgrade='si').
+  const upg = {};
+  dataRows.forEach(r => {
+    const st = SS[idOf(r)];
+    if (!(st && st.upgrade && st.upgrade.value === 'si')) return;
+    const isp = ispResolved(r) || 'SIN ISP';
+    const u = upg[isp] = upg[isp] || { puntos: 0, conect: 0, servicio: 0, qa: 0, ids: [] };
+    u.puntos += 1; u.ids.push(idOf(r));
+    if (stEq(r, 'conect', 'si') && !stEq(r, 'motivoConect', 'vandalizado')) u.conect += 1;
+    if (stEq(r, 'estadoConect', 'con')) u.servicio += 1;
+    if (stEq(r, 'qaEstado', 'con')) u.qa += 1;
+  });
+  renderUpgrade(upg);
 
   buildCharts({
     total: sum(k.total), fijas: sum(k.fijas), lpr: sum(k.lpr), domos: sum(k.domos),
@@ -1908,6 +1931,32 @@ function renderPlanFiberco() {
   const tot = { puntos: 0, gabOk: 0, posTot: 0, posOk: 0, posPuntos: 0, meta: 0 };
   isps.forEach(i => Object.keys(tot).forEach(f => tot[f] += plan[i][f]));
   box.innerHTML = isps.map(i => tarjeta(nombre[i] || i, plan[i])).join('') + (isps.length > 1 ? tarjeta('Total plan', tot, 'total') : '');
+}
+
+// Tarjetas UPGRADE por ISP (mismo estilo que el plan Fiberco).
+function renderUpgrade(upg) {
+  const box = document.getElementById('upgradeGrid');
+  const wrap = document.getElementById('upgradeSection');
+  if (!box || !wrap) return;
+  const orden = ['BIBOP', 'F2H', 'TELVISO', 'METROTEL'];
+  const isps = Object.keys(upg).sort((a, b) => ((orden.indexOf(a) + 1) || 99) - ((orden.indexOf(b) + 1) || 99));
+  wrap.style.display = isps.length ? '' : 'none';
+  if (!isps.length) { box.innerHTML = ''; return; }
+  const nombre = { BIBOP: 'Bibop', F2H: 'F2H', TELVISO: 'Telviso', METROTEL: 'Metrotel' };
+  const fila = (lbl, ok, tot, color) => {
+    const pct = tot ? Math.round(ok / tot * 100) : 0;
+    return `<div class="plan-row"><div class="pr-top"><span>${lbl}</span><span><b>${ok}</b> / ${tot} · ${pct}%</span></div>
+      <div class="plan-bar"><div style="width:${pct}%;background:${color}"></div></div></div>`;
+  };
+  const tarjeta = (titulo, u, cls) => `<div class="plan-card ${cls || ''}">
+    <h4>${titulo}<span>${u.puntos} ${u.puntos === 1 ? 'punto' : 'puntos'} upgrade</span></h4>
+    ${fila('Conectividad ISP', u.conect, u.puntos, '#22d3ee')}
+    ${fila('Con servicio', u.servicio, u.puntos, '#3ecf8e')}
+    ${u.ids ? `<div class="plan-row" style="font-size:11.5px;color:var(--text2);font-family:var(--mono,monospace)">IDs: ${u.ids.sort().join(' · ')}</div>` : ''}
+  </div>`;
+  const tot = { puntos: 0, conect: 0, servicio: 0, qa: 0 };
+  isps.forEach(i => Object.keys(tot).forEach(f => tot[f] += upg[i][f]));
+  box.innerHTML = isps.map(i => tarjeta(nombre[i] || i, upg[i])).join('') + (isps.length > 1 ? tarjeta('Total upgrade', tot, 'total') : '');
 }
 
 document.getElementById('planLoteFilter').addEventListener('click', (e) => {
