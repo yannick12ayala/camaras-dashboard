@@ -1,4 +1,4 @@
-﻿<title>Cámaras Pilar · Control de avance</title>
+<title>Cámaras Pilar · Control de avance</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0f1117">
@@ -256,6 +256,23 @@ body.read-only.is-isp-user .num-servicio-input,
 body.read-only.is-isp-user .observacion-input{cursor:text}
 body.read-only.is-isp-user .notify-btn{display:inline-flex}
 body.read-only.is-isp-user .foto-modal .fm-upload{display:block}
+/* Auditor QA global: QA, observaciones, fotos y "Cambio de estado" en todos los puntos. */
+body.read-only.is-qa .status[data-qa-id],
+body.read-only.is-qa .observacion-input{pointer-events:auto; cursor:pointer; opacity:1}
+body.read-only.is-qa .observacion-input{cursor:text}
+body.read-only.is-qa .notify-btn,
+body.read-only.has-ops .notify-btn{display:inline-flex}
+body.read-only.is-qa .foto-modal .fm-upload,
+body.read-only.has-ops .foto-modal .fm-upload{display:block}
+/* Operativo de uno o varios ISP (viendo todo): campos del ISP solo en las filas de esos ISP. */
+body.read-only.has-ops tr.ops-row .status[data-postes-id],
+body.read-only.has-ops tr.ops-row .status[data-gabinete-id],
+body.read-only.has-ops tr.ops-row .status[data-energizado-id],
+body.read-only.has-ops tr.ops-row .status[data-conect-id],
+body.read-only.has-ops tr.ops-row .num-servicio-input,
+body.read-only.has-ops tr.ops-row .observacion-input{pointer-events:auto; cursor:pointer; opacity:1}
+body.read-only.has-ops tr.ops-row .num-servicio-input,
+body.read-only.has-ops tr.ops-row .observacion-input{cursor:text}
 
 /* Opción "Restablecer a PENDIENTE" en los menús desplegables — visible solo para admin.
    El CSS la oculta por default; body.is-admin la muestra. */
@@ -1399,7 +1416,8 @@ function render(){
     const gabNumTxt = (r.gabNum && String(r.gabNum).trim() !== '') ? String(r.gabNum).trim() : '—';
     const gabNumCell = `<td class="gabnum">${gabNumTxt}</td>`;
 
-    return `<tr>
+    const opsRow = (window.USER_OPS || []).includes(String(getIspAsignado(r.id) || '').toUpperCase());
+    return `<tr${opsRow ? ' class="ops-row"' : ''}>
       <td class="id" data-id="${r.id}" title="Clic para ver el historial de cambios de este punto">${r.id}<span class="caret">▶</span></td>
       <td class="dir">${r.dir || ''}</td>
       <td class="barrio">${r.barrio || ''}</td>
@@ -1640,8 +1658,10 @@ document.addEventListener('change', async (e) => {
 document.addEventListener('focusin', (e) => {
   if (window.IS_ADMIN) return;
   const t = e.target;
-  const bloqueados = window.USER_ISP
+  const bloqueados = (window.USER_ISP || (window.USER_OPS || []).length)
     ? '.isp-input, .lote-input, .cantidad-mb-input, .id-dispositivo-input'
+    : window.IS_QA
+    ? '.isp-input, .lote-input, .num-servicio-input, .cantidad-mb-input, .id-dispositivo-input'
     : window.IS_TECNICO
     ? '.isp-input, .lote-input, .num-servicio-input, .cantidad-mb-input, .id-dispositivo-input'
     : '.isp-input, .lote-input, .num-servicio-input, .cantidad-mb-input, .id-dispositivo-input, .observacion-input';
@@ -2162,14 +2182,14 @@ document.addEventListener('click', async (e) => {
   // ── Toggle Gabinete (SI/NO) — admin abre menú con opción de restablecer ──
   const gabBtn = e.target.closest && e.target.closest('[data-gabinete-id]');
   if (gabBtn) {
-    if (window.IS_ADMIN || window.IS_TECNICO || window.USER_ISP) { openStateMenu(gabBtn, 'Gabinete', ['si','no'], 'gabineteEstado', v => setGabinete(gabBtn.dataset.gabineteId, v)); return; }
+    if (window.IS_ADMIN || window.IS_TECNICO || window.USER_ISP || (window.USER_OPS || []).length) { openStateMenu(gabBtn, 'Gabinete', ['si','no'], 'gabineteEstado', v => setGabinete(gabBtn.dataset.gabineteId, v)); return; }
     await toggleGabinete(gabBtn.dataset.gabineteId); return;
   }
 
   // ── Toggle Gabinete Energizado — mismo tratamiento ──
   const engBtn = e.target.closest && e.target.closest('[data-energizado-id]');
   if (engBtn) {
-    if (window.IS_ADMIN || window.IS_TECNICO || window.USER_ISP) { openStateMenu(engBtn, 'Energizado', ['si','no'], 'gabineteEnergizado', v => setEnergizado(engBtn.dataset.energizadoId, v)); return; }
+    if (window.IS_ADMIN || window.IS_TECNICO || window.USER_ISP || (window.USER_OPS || []).length) { openStateMenu(engBtn, 'Energizado', ['si','no'], 'gabineteEnergizado', v => setEnergizado(engBtn.dataset.energizadoId, v)); return; }
     await toggleEnergizado(engBtn.dataset.energizadoId); return;
   }
 
@@ -2272,7 +2292,7 @@ document.addEventListener('click', async (e) => {
   // ── Toggle Postes (persistente en el server) — admin abre menú ──
   const postesId = btn.dataset.postesId;
   if (postesId) {
-    if (window.IS_ADMIN || window.IS_TECNICO || window.USER_ISP) { openStateMenu(btn, 'Postes', ['si','no'], 'postes', v => setPostes(postesId, v)); return; }
+    if (window.IS_ADMIN || window.IS_TECNICO || window.USER_ISP || (window.USER_OPS || []).length) { openStateMenu(btn, 'Postes', ['si','no'], 'postes', v => setPostes(postesId, v)); return; }
     togglePostes(postesId); return;
   }
 
@@ -2341,7 +2361,19 @@ async function bootstrap() {
       window.IS_ADMIN = !!(me && me.isAdmin);
       window.IS_TECNICO = !window.IS_ADMIN && !!(me && me.isTecnico);
       window.USER_ISP = (!window.IS_ADMIN && me && me.isp) ? me.isp : '';
-    } catch { window.IS_ADMIN = false; window.IS_TECNICO = false; window.USER_ISP = ''; }
+      window.IS_QA = !window.IS_ADMIN && !!(me && me.isQA);
+      // ISP donde opera un usuario que ve todo (el usuario de un ISP ya opera en el suyo por is-isp-user).
+      window.USER_OPS = (!window.IS_ADMIN && !window.USER_ISP && me && Array.isArray(me.ops)) ? me.ops : [];
+    } catch { window.IS_ADMIN = false; window.IS_TECNICO = false; window.USER_ISP = ''; window.IS_QA = false; window.USER_OPS = []; }
+    if (window.IS_QA || window.USER_OPS.length) {
+      if (window.IS_QA) document.body.classList.add('is-qa');
+      if (window.USER_OPS.length) document.body.classList.add('has-ops');
+      const rbq = document.querySelector('.ro-banner');
+      const nom = { BIBOP: 'Bibop', F2H: 'F2H', TELVISO: 'Telviso', METROTEL: 'Metrotel' };
+      const opsTxt = window.USER_OPS.map(i => nom[i] || i).join(' y ');
+      if (rbq) rbq.innerHTML = (window.IS_QA ? '🎯 <b>Auditor QA:</b> ves todos los puntos y podés cargar <b>QA</b>, <b>observaciones</b> y <b>fotos</b> y enviar <b>Cambio de estado</b> en cualquiera. ' : '') +
+        (opsTxt ? '🏢 <b>Operativo de ' + opsTxt + ':</b> en esos puntos además podés cambiar <b>Postes, Gabinete, Energizado, Conectividad ISP y N° de servicio</b>. ' : '') + 'El resto es solo consulta.';
+    }
     // Usuario de un ISP: el servidor solo manda sus puntos; ocultamos los selectores de ISP.
     if (window.USER_ISP) {
       document.body.classList.add('is-isp-user');

@@ -120,7 +120,12 @@ function readSession(req) {
   if (!u) return null;
   return { username: data.u, isAdmin: !!u.isAdmin, isTecnico: !u.isAdmin && !!u.isTecnico,
            // Usuario de un ISP: solo ve (y, si es técnico, solo modifica) los puntos de ese ISP.
-           isp: (!u.isAdmin && ISP_LIST.includes(u.isp)) ? u.isp : '' };
+           isp: (!u.isAdmin && ISP_LIST.includes(u.isp)) ? u.isp : '',
+           // Auditor QA global: ve todo y carga QA (estado + motivo), observaciones y fotos en cualquier punto.
+           isQA: !u.isAdmin && !!u.isQA,
+           // ISP donde el usuario opera (postes, gabinete, energizado, conectividad ISP, N° de servicio).
+           // Usuario de un ISP: opera en el suyo. Si no está limitado a un ISP, puede operar en varios (u.ops).
+           ops: u.isAdmin ? [] : (ISP_LIST.includes(u.isp) ? [u.isp] : (Array.isArray(u.ops) ? u.ops.filter(i => ISP_LIST.includes(i)) : [])) };
 }
 function setSessionCookie(res, user) {
   res.setHeader('Set-Cookie', `${COOKIE}=${makeSession(user)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL / 1000}`);
@@ -821,7 +826,7 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith('/api/admin/')) {
     if (!sess || !sess.isAdmin) return json(res, 403, { error: 'Solo el administrador' });
     if (m === 'GET' && url === '/api/admin/users') {
-      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, isTecnico: !!DB.users[name].isTecnico, isp: DB.users[name].isp || '', email: DB.users[name].email || '', pending: !!DB.users[name].pending, isMain: name === ADMIN_USER }));
+      const users = Object.keys(DB.users).sort().map(name => ({ user: name, isAdmin: !!DB.users[name].isAdmin, isTecnico: !!DB.users[name].isTecnico, isp: DB.users[name].isp || '', isQA: !!DB.users[name].isQA, ops: DB.users[name].ops || [], email: DB.users[name].email || '', pending: !!DB.users[name].pending, isMain: name === ADMIN_USER }));
       return json(res, 200, { users });
     }
     // Perfil "Técnico de campo": puede cambiar postes, gabinete, energizado, instalación de cámara,
@@ -847,6 +852,27 @@ const server = http.createServer(async (req, res) => {
       if (isp) u.isp = isp; else delete u.isp;
       saveUsers();
       return json(res, 200, { ok: true, user: name, isp });
+    }
+    // Auditor QA global: ve todo y carga QA, observaciones y fotos en cualquier punto.
+    if (m === 'POST' && url === '/api/admin/set-qa') {
+      const body = await readJson(req);
+      const name = norm(body.user);
+      const u = DB.users[name];
+      if (!u) return json(res, 404, { error: 'No existe' });
+      if (body.isQA) u.isQA = true; else delete u.isQA;
+      saveUsers();
+      return json(res, 200, { ok: true, user: name, isQA: !!u.isQA });
+    }
+    // ISP donde opera un usuario que ve todo (ej.: auditor que además opera Telviso y Metrotel).
+    if (m === 'POST' && url === '/api/admin/set-ops') {
+      const body = await readJson(req);
+      const name = norm(body.user);
+      const u = DB.users[name];
+      if (!u) return json(res, 404, { error: 'No existe' });
+      const ops = (Array.isArray(body.ops) ? body.ops : []).map(s => String(s).trim().toUpperCase()).filter(i => ISP_LIST.includes(i));
+      if (ops.length) u.ops = [...new Set(ops)]; else delete u.ops;
+      saveUsers();
+      return json(res, 200, { ok: true, user: name, ops: u.ops || [] });
     }
     if (m === 'POST' && url === '/api/admin/set-admin') {
       const body = await readJson(req);
@@ -916,7 +942,7 @@ const server = http.createServer(async (req, res) => {
     return redirect(res, '/login');
   }
 
-  if (m === 'GET' && url === '/api/me') return json(res, 200, { user: sess.username, isAdmin: sess.isAdmin, isTecnico: sess.isTecnico, isp: sess.isp, email: (DB.users[sess.username] || {}).email || '', mailOn: !!SMTP_HOST });
+  if (m === 'GET' && url === '/api/me') return json(res, 200, { user: sess.username, isAdmin: sess.isAdmin, isTecnico: sess.isTecnico, isp: sess.isp, isQA: sess.isQA, ops: sess.ops, email: (DB.users[sess.username] || {}).email || '', mailOn: !!SMTP_HOST });
   // IDs visibles para un usuario de ISP (null = sin restricción). Se calcula una vez por request.
   let _scope;
   const scope = () => (_scope !== undefined ? _scope : (_scope = sess.isp ? idsForIsp(sess.isp) : null));
@@ -937,16 +963,20 @@ const server = http.createServer(async (req, res) => {
     // observaciones, fotos y "Cambio de estado" — solo en los puntos de su ISP (se valida más abajo).
     const ISP_FIELDS = ['postes', 'gabineteEstado', 'gabineteEnergizado', 'conect', 'motivoConect', 'numServicio', 'observacion'];
     const TEC_FIELDS = ['postes', 'gabineteEstado', 'gabineteEnergizado', 'estadoConect', 'motivoSinServicio', 'observacion'];
-    if (!sess.isTecnico && !sess.isp) return json(res, 403, { error: 'Solo un administrador puede modificar el Control de avance' });
+    const QA_FIELDS = ['qaEstado', 'qaMotivo', 'observacion'];
+    if (!sess.isTecnico && !sess.isp && !sess.isQA && !sess.ops.length) return json(res, 403, { error: 'Solo un administrador puede modificar el Control de avance' });
     if (url === '/api/status') {
-      const allowed = new Set([...(sess.isTecnico ? TEC_FIELDS : []), ...(sess.isp ? ISP_FIELDS : [])]);
-      // Campos que se pueden dejar vacíos (borrar texto / limpiar motivo); el resto vacío = PENDIENTE (solo admin).
-      const canEmpty = new Set(['motivoSinServicio', ...(sess.isp ? ['motivoConect', 'numServicio', 'observacion'] : [])]);
       let peek = {};
       try { peek = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
       req._jsonBody = peek;
       const f = String(peek.field || ''), v = peek.value == null ? '' : String(peek.value).trim();
-      if (!allowed.has(f)) return json(res, 403, { error: 'Tu perfil no puede modificar ese dato' });
+      // ¿El punto es de un ISP donde el usuario opera?
+      const pid = String(peek.id || '').trim();
+      const opera = sess.ops.some(i => idsForIsp(i).has(pid));
+      const allowed = new Set([...(sess.isTecnico ? TEC_FIELDS : []), ...(opera ? ISP_FIELDS : []), ...(sess.isQA ? QA_FIELDS : [])]);
+      // Campos que se pueden dejar vacíos (borrar texto / limpiar motivo); el resto vacío = PENDIENTE (solo admin).
+      const canEmpty = new Set(['motivoSinServicio', ...(opera ? ['motivoConect', 'numServicio', 'observacion'] : []), ...(sess.isQA ? ['qaMotivo', 'observacion'] : [])]);
+      if (!allowed.has(f)) return json(res, 403, { error: (!opera && ISP_FIELDS.includes(f) && sess.ops.length) ? 'Ese punto no es de un ISP en el que operes' : 'Tu perfil no puede modificar ese dato' });
       if (v === '' && !canEmpty.has(f)) return json(res, 403, { error: 'Solo un administrador puede volver a PENDIENTE' });
     }
   }
