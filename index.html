@@ -673,6 +673,7 @@
     <div class="map-legend">
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#3ecf8e"></div>Cámara funcionando</div>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#22d3ee"></div>Con conectividad</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#9b6bff"></div>Gabinete instalado</div>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7"></div>Sin conectividad</div>
       <span style="flex-basis:100%;height:0"></span>
       <div class="map-legend-item"><div class="map-legend-dot" style="background:#8b90a7;border-radius:2px;transform:rotate(45deg)"></div>Basural / Microbasural / Crónico / Coincidente</div>
@@ -1520,9 +1521,10 @@ let mapInstance = null;
 let allMarkers = [];
 
 function getMarkerColor(cam) {
-  // 3 estados: cámara instalada y funcionando (verde) > con conectividad (celeste) > sin conectividad (gris)
+  // 4 estados: cámara funcionando (verde) > con conectividad (celeste) > gabinete instalado (violeta) > resto (gris)
   if (cam.estadoCam === 1)     return '#3ecf8e'; // verde  = cámara instalada y funcionando
   if (cam.conectividad === 1)  return '#22d3ee'; // celeste = con conectividad (todavía sin cámara)
+  if (cam.instGabinete === 1)  return '#9b6bff'; // violeta = gabinete instalado (todavía sin conectividad)
   return '#8b90a7';                              // gris    = sin conectividad
 }
 
@@ -1538,7 +1540,7 @@ function makeSVGIcon(color) {
 
 // Puntos especiales (basural/microbasural/crónico/coincidente): un mismo icono
 // con forma de rombo, distinto del pin común, pintado con el color de su estado
-// (verde funcionando / celeste con conectividad / gris sin conectividad).
+// (verde funcionando / celeste con conectividad / violeta gabinete instalado / gris).
 function getCategoria(cam) {
   const d = (cam.direccion || '').trim().toLowerCase();
   if (d.startsWith('microbasural')) return 'microbasural';
