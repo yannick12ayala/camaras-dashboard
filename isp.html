@@ -962,8 +962,9 @@ function loteCell(id) {
   const s = window.SERVER_STATUS && window.SERVER_STATUS[id] && window.SERVER_STATUS[id].lote;
   const tip = s ? ('Asignado por ' + s.by + ' el ' + fmtDateTime(s.at))
                 : 'Elegí a qué lote pertenece este punto';
+  const lista = (val && !LOTES.includes(val)) ? LOTES.concat([val]) : LOTES;  // ej. "A adjudicar" (vista de ISP)
   const opts = ['<option value="">—</option>']
-    .concat(LOTES.map(l => '<option value="' + l + '"' + (l === val ? ' selected' : '') + '>' + l + '</option>'))
+    .concat(lista.map(l => '<option value="' + l + '"' + (l === val ? ' selected' : '') + '>' + l + '</option>'))
     .join('');
   return '<td class="lote-col">' +
          '<select class="lote-input" data-lote-id="' + id + '" title="' + tip + '">' + opts + '</select>' +
@@ -2340,6 +2341,9 @@ async function bootstrap() {
     if (window.USER_ISP) {
       document.body.classList.add('is-isp-user');
       const fI = document.getElementById('fISP'); if (fI) fI.style.display = 'none';
+      // Los ISP ven Lote 1 y el resto como "A adjudicar".
+      const fL = document.getElementById('fLote');
+      if (fL) fL.innerHTML = '<option value="">Todos los lotes</option><option value="Lote 1">Lote 1</option><option value="A adjudicar">A adjudicar</option>';
       const pm = document.getElementById('pmIsp'); if (pm) pm.style.display = 'none';
       const rb0 = document.querySelector('.ro-banner');
       if (rb0) rb0.innerHTML = '🏢 <b>Usuario ' + window.USER_ISP + ':</b> ves solo tus puntos. Podés cambiar <b>Postes, Gabinete, Energizado, Conectividad ISP y N° de servicio</b>, cargar <b>fotos</b> y <b>observaciones</b> y enviar <b>Cambio de estado</b>. El resto es solo consulta.';

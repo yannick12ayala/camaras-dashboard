@@ -1922,7 +1922,7 @@ window.ACTIVE_LOTE = '__ALL__';
 function renderLoteFilter(isp, loteCount, total) {
   const box = document.getElementById('loteFilter');
   if (!isp) { box.style.display = 'none'; box.innerHTML = ''; return; }
-  const num = l => parseInt(String(l).replace(/\D/g, ''), 10) || 0;
+  const num = l => parseInt(String(l).replace(/\D/g, ''), 10) || 999;  // "A adjudicar" va al final
   const lotes = Object.keys(loteCount).filter(l => l).sort((a, b) => num(a) - num(b));
   const btn = (val, label, cnt) =>
     `<button class="isp-filter-btn${window.ACTIVE_LOTE === val ? ' active' : ''}" data-lote="${val}">${label} <span class="lote-cnt">${cnt}</span></button>`;

@@ -314,6 +314,17 @@ function pickIds(obj, allowed) {
   for (const k of Object.keys(obj || {})) if (allowed.has(String(k))) out[k] = obj[k];
   return out;
 }
+// Los ISP solo conocen el Lote 1; el resto de los lotes los ven como "A adjudicar".
+const LOTE_VISIBLE_ISP = 'Lote 1';
+const maskLote = v => (v && v !== LOTE_VISIBLE_ISP ? 'A adjudicar' : v);
+function maskStatusesForIsp(obj) {
+  const out = {};
+  for (const id of Object.keys(obj)) {
+    const st = obj[id];
+    out[id] = (st && st.lote && st.lote.value) ? { ...st, lote: { ...st.lote, value: maskLote(String(st.lote.value)) } } : st;
+  }
+  return out;
+}
 
 function saveStatuses(obj) {
   fs.mkdirSync(path.dirname(STATUS_FILE), { recursive: true });
@@ -826,7 +837,7 @@ const server = http.createServer(async (req, res) => {
   // Estados persistentes (compartidos): quién marcó, cuándo
   if (m === 'GET' && url === '/api/status') {
     const all = loadStatuses();
-    return json(res, 200, scope() ? pickIds(all, scope()) : all);
+    return json(res, 200, scope() ? maskStatusesForIsp(pickIds(all, scope())) : all);
   }
   // Control de avance: los admin modifican todo. Los "técnicos de campo" solo postes, gabinete,
   // energizado, instalación de cámara (+ su motivo), observaciones, fotos y "Cambio de estado".
@@ -1058,7 +1069,10 @@ const server = http.createServer(async (req, res) => {
       let entries = raw.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
       if (filterId)    entries = entries.filter(e => String(e.id) === filterId);
       if (filterField) entries = entries.filter(e => e.field === filterField);
-      if (scope()) entries = entries.filter(e => scope().has(String(e.id)));
+      if (scope()) {
+        entries = entries.filter(e => scope().has(String(e.id)))
+          .map(e => e.field === 'lote' ? { ...e, prev: e.prev ? maskLote(String(e.prev)) : e.prev, next: e.next ? maskLote(String(e.next)) : e.next } : e);
+      }
       // Últimos 500 (más antiguos primero → los invertimos para mostrar los más nuevos arriba)
       return json(res, 200, entries.slice(-500).reverse());
     } catch (e) { return json(res, 500, { error: String(e) }); }
