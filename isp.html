@@ -393,6 +393,60 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .pm-group{display:flex; flex-wrap:wrap; gap:6px}
 .pm-btn{border:1px solid var(--line); background:var(--surf); color:var(--ink-2); font:inherit; font-size:12px; font-weight:600; padding:6px 12px; border-radius:999px; cursor:pointer}
 .pm-btn.active{background:var(--accent); border-color:var(--accent); color:#fff}
+/* Chat */
+.ch-badge{display:inline-block; min-width:18px; padding:1px 6px; border-radius:999px; background:var(--bad); color:#fff; font-size:11px; margin-left:4px; text-align:center}
+.ch-badge[hidden]{display:none}
+.ch-wrap{display:grid; grid-template-columns:300px minmax(0,1fr); gap:12px; height:calc(100vh - 230px); min-height:420px}
+.ch-side,.ch-panel{background:var(--surf); border:1px solid var(--line); border-radius:var(--radius); display:flex; flex-direction:column; min-height:0; overflow:hidden}
+.ch-side-h{display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid var(--line)}
+.ch-list{overflow:auto; flex:1}
+.ch-item{display:block; width:100%; text-align:left; border:none; border-bottom:1px solid var(--line-2); background:transparent; color:var(--ink); font:inherit; padding:10px 12px; cursor:pointer}
+.ch-item:hover{background:var(--line-2)}
+.ch-item.active{background:var(--accent-soft)}
+.ch-it-top{display:flex; justify-content:space-between; gap:6px; font-size:13px}
+.ch-it-sub,.ch-it-last{font-size:12px; color:var(--muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ch-unread{background:var(--accent); color:#fff; border-radius:999px; font-size:11px; padding:0 7px; font-weight:700; height:18px; line-height:18px}
+.ch-head{padding:10px 12px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:flex-start}
+.ch-head h3{margin:0; font-size:15px}
+.ch-head .ch-hmain{flex:1; min-width:0}
+.ch-head .ch-hbtns{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end}
+.ch-chips{display:flex; flex-wrap:wrap; gap:4px; margin-top:6px}
+.ch-chip{font-size:11px; padding:2px 8px; border-radius:999px; background:var(--line-2); color:var(--ink-2)}
+.ch-chip span{color:var(--muted)}
+.ch-msgs{flex:1; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:8px; background:var(--bg)}
+.ch-msg{max-width:75%; align-self:flex-start; background:var(--surf); border:1px solid var(--line); border-radius:10px; padding:7px 10px}
+.ch-msg.mine{align-self:flex-end; background:var(--accent-soft); border-color:transparent}
+.ch-by{font-size:12px; font-weight:600; color:var(--accent)}
+.ch-by span{font-weight:400; color:var(--muted)}
+.ch-txt{font-size:14px; white-space:pre-wrap; overflow-wrap:anywhere}
+.ch-txt a{color:var(--accent)}
+.ch-at{font-size:10px; color:var(--muted); text-align:right; margin-top:2px}
+.ch-sys{align-self:center; font-size:11px; color:var(--muted); font-style:italic; text-align:center}
+.ch-form{display:flex; gap:8px; padding:10px; border-top:1px solid var(--line)}
+.ch-form[hidden]{display:none}
+.ch-form textarea{flex:1; resize:none; height:44px; font:inherit; font-size:14px; padding:8px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surf); color:var(--ink)}
+.ch-empty{padding:20px; color:var(--muted); font-size:13px; text-align:center}
+.pm-btn.ch-primary{background:var(--accent); color:#fff; border-color:var(--accent)}
+.pm-btn.ch-danger{color:var(--bad)}
+.ch-back{display:none}
+@media (max-width:900px){
+  .ch-wrap{grid-template-columns:1fr; height:calc(100vh - 200px)}
+  .ch-wrap.open .ch-side{display:none}
+  .ch-wrap:not(.open) .ch-panel{display:none}
+  .ch-back{display:inline-block}
+  .ch-msg{max-width:88%}
+}
+.ch-modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:3000; padding:16px}
+.ch-modal[hidden]{display:none}
+.ch-dlg{background:var(--surf); color:var(--ink); border-radius:12px; padding:16px; width:min(440px,100%); max-height:90vh; display:flex; flex-direction:column; gap:8px}
+.ch-dlg h3{margin:0 0 4px; font-size:16px}
+.ch-dlg label{font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px}
+.ch-dlg input:not([type=checkbox]){font:inherit; font-size:14px; padding:7px 9px; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg); color:var(--ink)}
+.ch-ulist{overflow:auto; max-height:260px; min-height:60px; border:1px solid var(--line); border-radius:var(--radius)}
+.ch-dlg label.ch-u{flex-direction:row; align-items:center; gap:8px; padding:6px 10px; border-bottom:1px solid var(--line-2); font-size:13px; color:var(--ink); cursor:pointer}
+.ch-u small{color:var(--muted)}
+.ch-err{color:var(--bad); font-size:12px; min-height:14px}
+.ch-dlg-btns{display:flex; justify-content:flex-end; gap:8px}
 .pm-btn.pm-xls{border-color:var(--good); color:var(--good)}
 .pm-btn.pm-pdf{border-color:var(--pdf); color:var(--pdf)}
 .pm-btn:disabled{opacity:.5; cursor:default}
@@ -571,7 +625,39 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
     <button class="tab active" data-tab="tabla">📋 Control de avance</button>
     <button class="tab" data-tab="mapa">🗺️ Mapa plan Fiberco LOTE 1</button>
     <button class="tab" data-tab="consulta">🔎 Consulta fases anteriores</button>
+    <button class="tab" data-tab="chat">💬 Chat <span class="ch-badge" id="chatBadge" hidden></span></button>
   </nav>
+
+  <!-- Solapa: chat entre ISP, técnicos y municipio -->
+  <section id="tabChat" hidden>
+    <div class="ch-wrap" id="chWrap">
+      <div class="ch-side">
+        <div class="ch-side-h"><b>Conversaciones</b><button class="pm-btn ch-primary" id="chNew">+ Nueva</button></div>
+        <div class="ch-list" id="chList"><div class="ch-empty">Cargando…</div></div>
+      </div>
+      <div class="ch-panel">
+        <div id="chHead" class="ch-head"><div class="ch-empty" style="padding:8px 0">Elegí una conversación o creá una nueva.</div></div>
+        <div class="ch-msgs" id="chMsgs"></div>
+        <form class="ch-form" id="chForm" hidden>
+          <textarea id="chText" maxlength="4000" placeholder="Escribí un mensaje… (Enter envía, Shift+Enter nueva línea)"></textarea>
+          <button class="pm-btn ch-primary" id="chSend" type="submit">Enviar</button>
+        </form>
+      </div>
+    </div>
+  </section>
+  <div class="ch-modal" id="chModal" hidden>
+    <div class="ch-dlg" role="dialog" aria-modal="true" aria-labelledby="chMTitle">
+      <h3 id="chMTitle">Nueva conversación</h3>
+      <div id="chMNew" style="display:flex;flex-direction:column;gap:8px">
+        <label>Título<input id="chMTit" maxlength="120" placeholder="Ej: Gabinete sin energía en Derqui"></label>
+        <label>ID de cámara (opcional)<input id="chMCam" maxlength="20" placeholder="Ej: 1133"></label>
+      </div>
+      <label>Invitar a<input id="chMQ" placeholder="Buscar por usuario o perfil (técnico, F2H, QA…)"></label>
+      <div class="ch-ulist" id="chMUsers"></div>
+      <div class="ch-err" id="chMErr"></div>
+      <div class="ch-dlg-btns"><button type="button" class="pm-btn" id="chMCancel">Cancelar</button><button type="button" class="pm-btn ch-primary" id="chMOk">Crear</button></div>
+    </div>
+  </div>
 
   <!-- Solapa: consulta de cámaras de olas/fases anteriores (solo lectura) -->
   <section id="tabConsulta" hidden>
@@ -2673,9 +2759,11 @@ setInterval(async () => {
     $('tabMapa').hidden = !mapa;
     $('tabTabla').hidden = b.dataset.tab !== 'tabla';
     $('tabConsulta').hidden = b.dataset.tab !== 'consulta';
-    // En Consulta se usa su propia exportación (Excel / PDF); se oculta la del Control de avance
-    $('exportBtn').style.display = b.dataset.tab === 'consulta' ? 'none' : '';
+    $('tabChat').hidden = b.dataset.tab !== 'chat';
+    // En Consulta se usa su propia exportación (Excel / PDF); en el Chat no hay nada que exportar
+    $('exportBtn').style.display = (b.dataset.tab === 'consulta' || b.dataset.tab === 'chat') ? 'none' : '';
     if (b.dataset.tab === 'consulta' && window.openConsulta) window.openConsulta();
+    if (b.dataset.tab === 'chat' && window.openChat) window.openChat();
     if (mapa) { drawSafe(); setTimeout(() => map && map.invalidateSize(), 50); }
   });
   $('pmIsp').addEventListener('click', e => {
@@ -3235,6 +3323,183 @@ setInterval(async () => {
   }
   $('ocXls').addEventListener('click', e => correrOc(e.currentTarget, ocXls));
   $('ocPdf').addEventListener('click', e => correrOc(e.currentTarget, ocPdf));
+})();
+
+// ───── Chat: conversaciones entre ISP, técnicos y municipio ─────
+(function(){
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const linkify = h => h.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  let me = '', convs = [], cur = null, curLast = 0, users = null, modal = null, sel = new Set();
+  async function api(u, body){
+    const r = await fetch(u, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || ('Error ' + r.status));
+    return d;
+  }
+  const hora = iso => {
+    const d = new Date(iso);
+    return d.toDateString() === new Date().toDateString()
+      ? d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+  const rol = u => { const m = cur && cur.miembros.find(x => x.user === u) || (users || []).find(x => x.user === u); return m ? m.rol : ''; };
+
+  function badge(){
+    const n = convs.reduce((s, c) => s + (c.noLeidos || 0), 0), b = $('chatBadge');
+    b.textContent = n > 99 ? '99+' : n; b.hidden = !n;
+  }
+  function renderList(){
+    $('chList').innerHTML = convs.length ? convs.map(c => `<button class="ch-item${cur && cur.id === c.id ? ' active' : ''}" data-id="${esc(c.id)}">
+      <div class="ch-it-top"><b>${esc(c.titulo)}</b>${c.noLeidos ? `<span class="ch-unread">${c.noLeidos}</span>` : ''}</div>
+      <div class="ch-it-sub">${c.camId ? 'ID ' + esc(c.camId) + ' · ' : ''}${c.miembros.length} participante${c.miembros.length === 1 ? '' : 's'}${c.miembro ? '' : ' · no sos miembro'}</div>
+      ${c.ultimo ? `<div class="ch-it-last">${c.ultimo.sys ? '' : esc(c.ultimo.by) + ': '}${esc(c.ultimo.text)}</div>` : ''}</button>`).join('')
+      : '<div class="ch-empty">Todavía no hay conversaciones.<br>Creá una con “+ Nueva”.</div>';
+  }
+  async function loadList(){
+    convs = await api('/api/chat');
+    // La conversación abierta no cuenta como no leída
+    if (cur && cur.id && !$('tabChat').hidden) { const c = convs.find(x => x.id === cur.id); if (c) c.noLeidos = 0; }
+    renderList(); badge();
+  }
+  function renderHead(){
+    $('chHead').innerHTML = `<button class="pm-btn ch-back" id="chBack" type="button">←</button>
+      <div class="ch-hmain"><h3>${esc(cur.titulo)}${cur.camId ? ` <span style="color:var(--muted);font-weight:500">· ID ${esc(cur.camId)}</span>` : ''}</h3>
+      <div class="ch-chips">${cur.miembros.map(m => `<span class="ch-chip">${esc(m.user)} <span>${esc(m.rol)}</span></span>`).join('')}</div></div>
+      <div class="ch-hbtns"><button class="pm-btn" id="chInv" type="button">+ Invitar</button>${cur.miembro ? '<button class="pm-btn ch-danger" id="chLeave" type="button">Salir</button>' : ''}</div>`;
+    $('chBack').onclick = () => $('chWrap').classList.remove('open');
+    $('chInv').onclick = () => abrirModal('invite');
+    if ($('chLeave')) $('chLeave').onclick = salir;
+    $('chForm').hidden = false;
+    $('chText').placeholder = cur.miembro ? 'Escribí un mensaje… (Enter envía, Shift+Enter nueva línea)' : 'No sos miembro: si escribís, quedás sumado a la conversación';
+  }
+  function appendMsgs(list, forzar){
+    const box = $('chMsgs');
+    const abajo = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    list.forEach(x => {
+      if (x.n <= curLast) return;
+      curLast = x.n;
+      const el = document.createElement('div');
+      if (x.sys) { el.className = 'ch-sys'; el.textContent = x.text + ' · ' + hora(x.at); }
+      else {
+        el.className = 'ch-msg' + (x.by === me ? ' mine' : '');
+        el.innerHTML = (x.by === me ? '' : `<div class="ch-by">${esc(x.by)} <span>${esc(rol(x.by))}</span></div>`) +
+          `<div class="ch-txt">${linkify(esc(x.text))}</div><div class="ch-at">${hora(x.at)}</div>`;
+      }
+      box.appendChild(el);
+    });
+    if (forzar || abajo) box.scrollTop = box.scrollHeight;
+  }
+  async function abrir(id){
+    cur = { id }; curLast = 0;
+    $('chMsgs').innerHTML = '';
+    $('chWrap').classList.add('open');
+    try {
+      const d = await api('/api/chat/' + id);
+      if (!cur || cur.id !== id) return;
+      cur = d; renderHead(); appendMsgs(d.mensajes, true);
+      const c = convs.find(x => x.id === id); if (c) c.noLeidos = 0;
+      renderList(); badge();
+      if (window.innerWidth > 900) $('chText').focus();
+    } catch (e) { $('chHead').innerHTML = `<div class="ch-empty">${esc(e.message)}</div>`; $('chForm').hidden = true; }
+  }
+  async function poll(){
+    if (!cur || !cur.miembros) return;
+    const id = cur.id, d = await api('/api/chat/' + id + '?after=' + curLast);
+    if (!cur || cur.id !== id) return;
+    const cambio = JSON.stringify(d.miembros) !== JSON.stringify(cur.miembros) || d.miembro !== cur.miembro;
+    cur.miembros = d.miembros; cur.miembro = d.miembro;
+    if (cambio) renderHead();
+    appendMsgs(d.mensajes);
+  }
+  async function enviar(){
+    const t = $('chText').value.trim();
+    if (!t || !cur || !cur.miembros) return;
+    $('chSend').disabled = true;
+    try {
+      await api('/api/chat/' + cur.id + '/msg', { text: t });
+      $('chText').value = '';
+      await poll(); await loadList();
+    } catch (e) { alert('No se pudo enviar: ' + e.message); }
+    finally { $('chSend').disabled = false; $('chText').focus(); }
+  }
+  async function salir(){
+    if (!confirm('¿Salir de esta conversación? Vas a dejar de verla (te pueden volver a invitar).')) return;
+    try {
+      await api('/api/chat/' + cur.id + '/leave', {});
+      cur = null; curLast = 0;
+      $('chMsgs').innerHTML = ''; $('chForm').hidden = true;
+      $('chHead').innerHTML = '<div class="ch-empty" style="padding:8px 0">Elegí una conversación o creá una nueva.</div>';
+      $('chWrap').classList.remove('open');
+      await loadList();
+    } catch (e) { alert(e.message); }
+  }
+
+  // Modal: nueva conversación o invitar
+  function renderUsers(){
+    const q = $('chMQ').value.trim().toLowerCase();
+    const ya = new Set(modal === 'invite' && cur ? cur.miembros.map(m => m.user) : []);
+    const lista = (users || []).filter(u => !ya.has(u.user) && (!q || (u.user + ' ' + u.rol).toLowerCase().includes(q)));
+    $('chMUsers').innerHTML = users === null ? '<div class="ch-empty">Cargando usuarios…</div>'
+      : lista.length ? lista.map(u => `<label class="ch-u"><input type="checkbox" value="${esc(u.user)}"${sel.has(u.user) ? ' checked' : ''}> <span><b>${esc(u.user)}</b> <small>${esc(u.rol)}</small></span></label>`).join('')
+      : '<div class="ch-empty">No hay usuarios para mostrar.</div>';
+  }
+  async function abrirModal(modo){
+    modal = modo; sel = new Set();
+    $('chMTitle').textContent = modo === 'new' ? 'Nueva conversación' : 'Invitar a la conversación';
+    $('chMNew').style.display = modo === 'new' ? 'flex' : 'none';
+    $('chMOk').textContent = modo === 'new' ? 'Crear' : 'Invitar';
+    $('chMTit').value = ''; $('chMCam').value = ''; $('chMQ').value = ''; $('chMErr').textContent = '';
+    $('chModal').hidden = false;
+    renderUsers();
+    (modo === 'new' ? $('chMTit') : $('chMQ')).focus();
+    try { users = await api('/api/chat/users'); renderUsers(); } catch (e) { $('chMErr').textContent = e.message; }
+  }
+  const cerrarModal = () => { $('chModal').hidden = true; modal = null; };
+  $('chMUsers').addEventListener('change', e => { if (e.target.type === 'checkbox') e.target.checked ? sel.add(e.target.value) : sel.delete(e.target.value); });
+  $('chMQ').addEventListener('input', renderUsers);
+  $('chMCancel').onclick = cerrarModal;
+  $('chModal').addEventListener('click', e => { if (e.target.id === 'chModal') cerrarModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal) cerrarModal(); });
+  $('chMOk').onclick = async () => {
+    const btn = $('chMOk'); btn.disabled = true; $('chMErr').textContent = '';
+    try {
+      if (modal === 'new') {
+        const titulo = $('chMTit').value.trim();
+        if (!titulo) throw new Error('Poné un título para la conversación');
+        const d = await api('/api/chat', { titulo, camId: $('chMCam').value.trim(), miembros: [...sel] });
+        cerrarModal(); await loadList(); await abrir(d.id);
+      } else {
+        if (!sel.size) throw new Error('Elegí al menos una persona');
+        await api('/api/chat/' + cur.id + '/invite', { users: [...sel] });
+        cerrarModal(); await poll(); await loadList();
+      }
+    } catch (e) { $('chMErr').textContent = e.message; }
+    finally { btn.disabled = false; }
+  };
+  $('chNew').onclick = () => abrirModal('new');
+  $('chList').addEventListener('click', e => { const b = e.target.closest('.ch-item'); if (b) abrir(b.dataset.id); });
+  $('chForm').addEventListener('submit', e => { e.preventDefault(); enviar(); });
+  $('chText').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviar(); } });
+
+  async function quienSoy(){
+    if (me) return;
+    try { const r = await fetch('/api/me', { cache: 'no-store' }); if (r.ok) me = (await r.json()).user || ''; } catch {}
+  }
+  window.openChat = async () => {
+    await quienSoy();
+    try { await loadList(); } catch (e) { $('chList').innerHTML = `<div class="ch-empty">No se pudo cargar el chat: ${esc(e.message)}</div>`; }
+    if (cur && cur.miembros) poll().catch(() => {});
+  };
+  // Con la solapa abierta: mensajes nuevos cada 4 s y la lista cada 16 s. En otra solapa: el contador cada 32 s.
+  let tick = 0;
+  setInterval(() => {
+    if (document.hidden) return;
+    tick++;
+    const vis = !$('tabChat').hidden;
+    if (vis && cur && cur.miembros) poll().catch(() => {});
+    if ((vis && tick % 4 === 0) || tick % 8 === 0) loadList().catch(() => {});
+  }, 4000);
+  setTimeout(() => { quienSoy(); loadList().catch(() => {}); }, 1500);
 })();
 
 </script>

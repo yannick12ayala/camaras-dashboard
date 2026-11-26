@@ -268,6 +268,30 @@ function loadStatuses() {
 // El ISP de un punto es el asignado en el panel (statuses[id].isp, incluso vacío) o, si no hay,
 // la columna ISP del Excel. El filtrado se hace en el servidor: el resto de los datos nunca sale.
 const ISP_LIST = ['BIBOP', 'F2H', 'TELVISO', 'METROTEL'];
+
+// ─── Chat (conversaciones entre usuarios) ────────────────────
+const CHAT_FILE = process.env.CHAT_FILE || '/data/chat.json';
+function loadChat() {
+  try { const c = JSON.parse(fs.readFileSync(CHAT_FILE, 'utf8')); if (c && c.convs) return c; } catch {}
+  return { seq: 0, convs: {} };
+}
+const CHAT = loadChat();
+function saveChat() {
+  fs.mkdirSync(path.dirname(CHAT_FILE), { recursive: true });
+  const tmp = CHAT_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(CHAT));
+  fs.renameSync(tmp, CHAT_FILE);
+}
+// Etiqueta del perfil para mostrar en el chat (ej. "ISP F2H · Técnico")
+function rolDe(name) {
+  const u = DB.users[name]; if (!u) return 'Usuario eliminado';
+  if (u.isAdmin) return 'Administrador';
+  const p = [];
+  if (ISP_LIST.includes(u.isp)) p.push('ISP ' + u.isp);
+  if (u.isTecnico) p.push('Técnico');
+  if (u.isQA) p.push('Auditor QA');
+  return p.join(' · ') || 'Usuario';
+}
 let _XL = null;
 const idOfCell = v => String(v == null ? '' : v).replace('.0', '').trim();
 function loadExcelAoa() {
@@ -976,6 +1000,84 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(out));
+  }
+  // ── Chat: conversaciones entre ISP, técnicos y municipio. Ve una conversación quien es miembro
+  // (el admin ve todas). Cualquier miembro puede invitar a otros usuarios.
+  if (url === '/api/chat' || url.startsWith('/api/chat/')) {
+    const esMiembro = c => c.miembros.includes(sess.username);
+    const puedeVer = c => esMiembro(c) || sess.isAdmin;
+    const existe = n => !!DB.users[n];
+    if (m === 'GET' && url === '/api/chat/users') {
+      return json(res, 200, Object.keys(DB.users).filter(n => n !== sess.username).sort().map(n => ({ user: n, rol: rolDe(n) })));
+    }
+    if (m === 'GET' && url === '/api/chat') {
+      const out = Object.values(CHAT.convs).filter(puedeVer).map(c => {
+        const last = c.mensajes[c.mensajes.length - 1], leido = (c.leido || {})[sess.username] || 0;
+        return { id: c.id, titulo: c.titulo, camId: c.camId || '', creador: c.creador, miembro: esMiembro(c),
+          miembros: c.miembros.map(n => ({ user: n, rol: rolDe(n) })),
+          ultimo: last ? { by: last.by, text: String(last.text).slice(0, 140), sys: !!last.sys } : null,
+          actualizado: last ? last.at : c.creado,
+          noLeidos: esMiembro(c) ? c.mensajes.filter(x => x.n > leido && x.by !== sess.username && !x.sys).length : 0 };
+      }).sort((a, b) => String(b.actualizado).localeCompare(String(a.actualizado)));
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify(out));
+    }
+    if (m === 'POST' && url === '/api/chat') {
+      const b = await readJson(req);
+      const titulo = String(b.titulo || '').trim().slice(0, 120);
+      if (!titulo) return json(res, 400, { error: 'Poné un título para la conversación' });
+      const camId = String(b.camId || '').trim().slice(0, 20);
+      const inv = [...new Set((Array.isArray(b.miembros) ? b.miembros : []).map(norm))].filter(n => existe(n) && n !== sess.username);
+      const id = 'c' + (++CHAT.seq);
+      const at = new Date().toISOString();
+      const c = { id, titulo, camId, creador: sess.username, creado: at, miembros: [sess.username, ...inv], mensajes: [], leido: {} };
+      c.mensajes.push({ n: 1, by: sess.username, at, sys: true, text: `${sess.username} creó la conversación` + (inv.length ? ` e invitó a ${inv.join(', ')}` : '') });
+      c.leido[sess.username] = 1;
+      CHAT.convs[id] = c; saveChat();
+      return json(res, 200, { ok: true, id });
+    }
+    const mm = url.match(/^\/api\/chat\/(c\d+)(?:\/(msg|invite|leave))?$/);
+    const c = mm && CHAT.convs[mm[1]];
+    if (!c || !puedeVer(c)) return json(res, 404, { error: 'Conversación no encontrada' });
+    const sysMsg = text => c.mensajes.push({ n: (c.mensajes.length ? c.mensajes[c.mensajes.length - 1].n : 0) + 1, by: sess.username, at: new Date().toISOString(), sys: true, text });
+    if (m === 'GET' && !mm[2]) {
+      const after = parseInt(new URL(req.url, 'http://x').searchParams.get('after') || '0', 10) || 0;
+      const last = c.mensajes.length ? c.mensajes[c.mensajes.length - 1].n : 0;
+      if (esMiembro(c) && ((c.leido || {})[sess.username] || 0) < last) { (c.leido = c.leido || {})[sess.username] = last; saveChat(); }
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ id: c.id, titulo: c.titulo, camId: c.camId || '', creador: c.creador, miembro: esMiembro(c),
+        miembros: c.miembros.map(n => ({ user: n, rol: rolDe(n) })), mensajes: c.mensajes.filter(x => x.n > after) }));
+    }
+    if (m === 'POST' && mm[2] === 'msg') {
+      const b = await readJson(req);
+      const text = String(b.text || '').trim().slice(0, 4000);
+      if (!text) return json(res, 400, { error: 'Mensaje vacío' });
+      // Si el admin escribe en una conversación ajena, queda sumado como miembro
+      if (!esMiembro(c)) { c.miembros.push(sess.username); sysMsg(`${sess.username} se sumó a la conversación`); }
+      const n = c.mensajes[c.mensajes.length - 1].n + 1;
+      c.mensajes.push({ n, by: sess.username, at: new Date().toISOString(), text });
+      (c.leido = c.leido || {})[sess.username] = n;
+      saveChat();
+      return json(res, 200, { ok: true, n });
+    }
+    if (m === 'POST' && mm[2] === 'invite') {
+      if (!esMiembro(c) && !sess.isAdmin) return json(res, 403, { error: 'Solo los miembros pueden invitar' });
+      const b = await readJson(req);
+      const inv = [...new Set((Array.isArray(b.users) ? b.users : []).map(norm))].filter(n => existe(n) && !c.miembros.includes(n));
+      if (!inv.length) return json(res, 400, { error: 'Elegí al menos un usuario que no esté en la conversación' });
+      c.miembros.push(...inv);
+      sysMsg(`${sess.username} invitó a ${inv.join(', ')}`);
+      saveChat();
+      return json(res, 200, { ok: true });
+    }
+    if (m === 'POST' && mm[2] === 'leave') {
+      if (!esMiembro(c)) return json(res, 400, { error: 'No sos miembro de esta conversación' });
+      c.miembros = c.miembros.filter(n => n !== sess.username);
+      sysMsg(`${sess.username} salió de la conversación`);
+      saveChat();
+      return json(res, 200, { ok: true });
+    }
+    return json(res, 404, { error: 'No encontrado' });
   }
   if (m === 'GET' && url === '/cuenta') return serveFile(res, 'cuenta.html', 'text/html; charset=utf-8');
   if (m === 'GET' && url === '/admin') { if (!sess.isAdmin) return redirect(res, '/'); return serveFile(res, 'admin.html', 'text/html; charset=utf-8'); }
