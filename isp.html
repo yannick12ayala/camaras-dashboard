@@ -437,7 +437,9 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .oc-fase{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent)}
 .oc-fase.f4{background:rgba(168,85,247,.12); color:#9b4ee0; border-color:#9b4ee0}
 .oc-pin{width:20px; height:20px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; font:700 10px/1 'JetBrains Mono',monospace; color:#fff}
+.oc-pin.down{border-color:#d64545; box-shadow:0 0 0 2px #d64545, 0 1px 3px rgba(0,0,0,.45)}
 .oc-pin.sel{outline:3px solid #facc15}
+.oc-fase.f3{background:rgba(47,125,225,.12); color:#2f7de1; border-color:#2f7de1}
 .oc-pin.futuro{width:16px; height:16px; font-size:9px; background:#c4c7d0; color:#5b6170; border-color:#9aa0ad}
 .oc-fase.f5{background:rgba(139,144,167,.15); color:#6b7180; border-color:#9aa0ad}
 @media (max-width:900px){ .oc-layout, .oc-layout.has-ficha{grid-template-columns:1fr} .oc-ficha{min-height:0; max-height:none} #olaMap{height:60vh} }
@@ -602,10 +604,10 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
       <aside class="oc-ficha" id="ocFicha"><div class="oc-empty">Tocá un punto del mapa o una fila de la tabla para ver su ficha.</div></aside>
     </div>
     <div class="pm-legend">
-      <span><span class="dot" style="background:#22a565"></span>Funcionando (UP)</span>
-      <span><span class="dot" style="background:#d64545"></span>DOWN</span>
-      <span><span class="dot" style="background:#8b90a7"></span>Sin dato</span>
+      <span><span class="dot" style="background:#2f7de1"></span>Fase 3</span>
+      <span><span class="dot" style="background:#9b4ee0"></span>Fase 4</span>
       <span><span class="dot" style="background:#c4c7d0;border:1px solid #9aa0ad"></span>Fase 5 · punto futuro</span>
+      <span><span class="dot" style="background:#fff;border:2px solid #d64545"></span>Borde rojo: DOWN</span>
       <span>El número dentro de cada punto es la fase a la que pertenece.</span>
     </div>
     <div class="pm-note" id="ocSinGeo"></div>
@@ -2995,6 +2997,9 @@ setInterval(async () => {
   // El color sale del monitoreo (dato más reciente del Excel)
   const estado = p => p.monitoreo === 'UP' ? 'up' : (p.monitoreo === 'DOWN' ? 'prob' : 'nd');
   const COLOR = { up: '#22a565', prob: '#d64545', nd: '#8b90a7' };
+  // En el mapa cada fase tiene su color; el estado DOWN se marca con un borde rojo
+  const FCOLOR = { '3': '#2f7de1', '4': '#9b4ee0', '5': '#c4c7d0' };
+  const fcolor = o => FCOLOR[o] || '#e08a1e';
   const sino = v => v === 'SI' ? '<span class="oc-ok">SÍ</span>' : v === 'NO' ? '<span class="oc-bad">NO</span>' : (v ? esc(v) : '—');
   const val = v => (v === '' || v == null) ? '—' : esc(v);
 
@@ -3117,8 +3122,8 @@ setInterval(async () => {
     vis.forEach(p => {
       if (!geo(p)) return;
       const icon = L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 10],
-        html: `<div class="oc-pin${key(p) === selKey ? ' sel' : ''}" style="background:${COLOR[estado(p)]}">${esc(p.ola)}</div>` });
-      const mk = L.marker([p.lat, p.lon], { icon, title: code(p) + ' · ' + (p.dir || '') });
+        html: `<div class="oc-pin${estado(p) === 'prob' ? ' down' : ''}${key(p) === selKey ? ' sel' : ''}" style="background:${fcolor(p.ola)}">${esc(p.ola)}</div>` });
+      const mk = L.marker([p.lat, p.lon], { icon, title: code(p) + ' · ' + (p.dir || '') + ' · Fase ' + p.ola + (p.monitoreo ? ' · ' + p.monitoreo : '') });
       mk._ocKey = key(p);
       mk.on('click', () => select(p, false));
       mk.addTo(layer);
