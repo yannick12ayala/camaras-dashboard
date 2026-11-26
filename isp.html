@@ -2666,6 +2666,8 @@ setInterval(async () => {
     $('tabMapa').hidden = !mapa;
     $('tabTabla').hidden = b.dataset.tab !== 'tabla';
     $('tabConsulta').hidden = b.dataset.tab !== 'consulta';
+    // En Consulta se usa su propia exportación (Excel / PDF); se oculta la del Control de avance
+    $('exportBtn').style.display = b.dataset.tab === 'consulta' ? 'none' : '';
     if (b.dataset.tab === 'consulta' && window.openConsulta) window.openConsulta();
     if (mapa) { drawSafe(); setTimeout(() => map && map.invalidateSize(), 50); }
   });
