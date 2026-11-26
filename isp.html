@@ -396,8 +396,15 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 /* Chat */
 .ch-badge{display:inline-block; min-width:18px; padding:1px 6px; border-radius:999px; background:var(--bad); color:#fff; font-size:11px; margin-left:4px; text-align:center}
 .ch-badge[hidden]{display:none}
-.ch-wrap{display:grid; grid-template-columns:300px minmax(0,1fr); gap:12px; height:calc(100vh - 230px); min-height:420px}
-.ch-side,.ch-panel{background:var(--surf); border:1px solid var(--line); border-radius:var(--radius); display:flex; flex-direction:column; min-height:0; overflow:hidden}
+.ch-fab{position:fixed; right:20px; bottom:20px; z-index:2500; width:56px; height:56px; border-radius:50%; border:none; background:var(--accent); color:#fff; font-size:24px; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.ch-fab .ch-badge{position:absolute; top:-2px; right:-2px; margin:0}
+.ch-float{position:fixed; right:20px; bottom:88px; z-index:2500; width:380px; height:min(600px, calc(100vh - 110px)); box-shadow:0 10px 32px rgba(0,0,0,.3); border-radius:12px}
+.ch-float[hidden]{display:none}
+/* Una sola columna: la lista o la conversación abierta */
+.ch-wrap{display:grid; grid-template-columns:1fr; height:100%}
+.ch-wrap.open .ch-side{display:none}
+.ch-wrap:not(.open) .ch-panel{display:none}
+.ch-side,.ch-panel{background:var(--surf); border:1px solid var(--line); border-radius:12px; display:flex; flex-direction:column; min-height:0; overflow:hidden}
 .ch-side-h{display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid var(--line)}
 .ch-list{overflow:auto; flex:1}
 .ch-item{display:block; width:100%; text-align:left; border:none; border-bottom:1px solid var(--line-2); background:transparent; color:var(--ink); font:inherit; padding:10px 12px; cursor:pointer}
@@ -428,13 +435,11 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .ch-empty{padding:20px; color:var(--muted); font-size:13px; text-align:center}
 .pm-btn.ch-primary{background:var(--accent); color:#fff; border-color:var(--accent)}
 .pm-btn.ch-danger{color:var(--bad)}
-.ch-back{display:none}
-@media (max-width:900px){
-  .ch-wrap{grid-template-columns:1fr; height:calc(100vh - 200px)}
-  .ch-wrap.open .ch-side{display:none}
-  .ch-wrap:not(.open) .ch-panel{display:none}
-  .ch-back{display:inline-block}
-  .ch-msg{max-width:88%}
+.ch-msg{max-width:85%}
+@media (max-width:600px){
+  .ch-float{inset:0; width:auto; height:auto; border-radius:0}
+  .ch-float .ch-side,.ch-float .ch-panel{border-radius:0}
+  body.ch-abierto .ch-fab{display:none}
 }
 .ch-modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:3000; padding:16px}
 .ch-modal[hidden]{display:none}
@@ -625,21 +630,21 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
     <button class="tab active" data-tab="tabla">📋 Control de avance</button>
     <button class="tab" data-tab="mapa">🗺️ Mapa plan Fiberco LOTE 1</button>
     <button class="tab" data-tab="consulta">🔎 Consulta fases anteriores</button>
-    <button class="tab" data-tab="chat">💬 Chat <span class="ch-badge" id="chatBadge" hidden></span></button>
   </nav>
 
-  <!-- Solapa: chat entre ISP, técnicos y municipio -->
-  <section id="tabChat" hidden>
+  <!-- Chat flotante entre ISP, técnicos y municipio -->
+  <button class="ch-fab" id="chFab" type="button" title="Chat" aria-label="Abrir chat">💬<span class="ch-badge" id="chatBadge" hidden></span></button>
+  <section class="ch-float" id="tabChat" hidden>
     <div class="ch-wrap" id="chWrap">
       <div class="ch-side">
-        <div class="ch-side-h"><b>Conversaciones</b><button class="pm-btn ch-primary" id="chNew">+ Nueva</button></div>
+        <div class="ch-side-h"><b>💬 Chat</b><span style="display:flex;gap:6px"><button class="pm-btn ch-primary" id="chNew">+ Nueva</button><button class="pm-btn" id="chClose" type="button" title="Cerrar" aria-label="Cerrar chat">✕</button></span></div>
         <div class="ch-list" id="chList"><div class="ch-empty">Cargando…</div></div>
       </div>
       <div class="ch-panel">
         <div id="chHead" class="ch-head"><div class="ch-empty" style="padding:8px 0">Elegí una conversación o creá una nueva.</div></div>
         <div class="ch-msgs" id="chMsgs"></div>
         <form class="ch-form" id="chForm" hidden>
-          <textarea id="chText" maxlength="4000" placeholder="Escribí un mensaje… (Enter envía, Shift+Enter nueva línea)"></textarea>
+          <textarea id="chText" maxlength="4000" placeholder="Escribí un mensaje…"></textarea>
           <button class="pm-btn ch-primary" id="chSend" type="submit">Enviar</button>
         </form>
       </div>
@@ -2759,11 +2764,9 @@ setInterval(async () => {
     $('tabMapa').hidden = !mapa;
     $('tabTabla').hidden = b.dataset.tab !== 'tabla';
     $('tabConsulta').hidden = b.dataset.tab !== 'consulta';
-    $('tabChat').hidden = b.dataset.tab !== 'chat';
-    // En Consulta se usa su propia exportación (Excel / PDF); en el Chat no hay nada que exportar
-    $('exportBtn').style.display = (b.dataset.tab === 'consulta' || b.dataset.tab === 'chat') ? 'none' : '';
+    // En Consulta se usa su propia exportación (Excel / PDF); se oculta la del Control de avance
+    $('exportBtn').style.display = b.dataset.tab === 'consulta' ? 'none' : '';
     if (b.dataset.tab === 'consulta' && window.openConsulta) window.openConsulta();
-    if (b.dataset.tab === 'chat' && window.openChat) window.openChat();
     if (mapa) { drawSafe(); setTimeout(() => map && map.invalidateSize(), 50); }
   });
   $('pmIsp').addEventListener('click', e => {
@@ -3365,12 +3368,15 @@ setInterval(async () => {
     $('chHead').innerHTML = `<button class="pm-btn ch-back" id="chBack" type="button">←</button>
       <div class="ch-hmain"><h3>${esc(cur.titulo)}${cur.camId ? ` <span style="color:var(--muted);font-weight:500">· ID ${esc(cur.camId)}</span>` : ''}</h3>
       <div class="ch-chips">${cur.miembros.map(m => `<span class="ch-chip">${esc(m.user)} <span>${esc(m.rol)}</span></span>`).join('')}</div></div>
-      <div class="ch-hbtns"><button class="pm-btn" id="chInv" type="button">+ Invitar</button>${cur.miembro ? '<button class="pm-btn ch-danger" id="chLeave" type="button">Salir</button>' : ''}</div>`;
-    $('chBack').onclick = () => $('chWrap').classList.remove('open');
+      <div class="ch-hbtns"><button class="pm-btn" id="chInv" type="button">+ Invitar</button>${cur.miembro ? '<button class="pm-btn ch-danger" id="chLeave" type="button">Salir</button>' : ''}<button class="pm-btn" id="chClose2" type="button" title="Cerrar" aria-label="Cerrar chat">✕</button></div>`;
+    // Volver a la lista: se deja de seguir esa conversación (los mensajes nuevos cuentan como no leídos)
+    $('chBack').onclick = () => { cur = null; curLast = 0; $('chWrap').classList.remove('open'); renderList(); };
+    $('chClose2').onclick = () => $('chClose').click();
     $('chInv').onclick = () => abrirModal('invite');
     if ($('chLeave')) $('chLeave').onclick = salir;
     $('chForm').hidden = false;
-    $('chText').placeholder = cur.miembro ? 'Escribí un mensaje… (Enter envía, Shift+Enter nueva línea)' : 'No sos miembro: si escribís, quedás sumado a la conversación';
+    $('chText').placeholder = cur.miembro ? 'Escribí un mensaje…' : 'Si escribís, quedás sumado a la conversación';
+    $('chText').title = 'Enter envía · Shift+Enter nueva línea';
   }
   function appendMsgs(list, forzar){
     const box = $('chMsgs');
@@ -3459,7 +3465,7 @@ setInterval(async () => {
   $('chMQ').addEventListener('input', renderUsers);
   $('chMCancel').onclick = cerrarModal;
   $('chModal').addEventListener('click', e => { if (e.target.id === 'chModal') cerrarModal(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal) cerrarModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal) { cerrarModal(); e.stopImmediatePropagation(); } });
   $('chMOk').onclick = async () => {
     const btn = $('chMOk'); btn.disabled = true; $('chMErr').textContent = '';
     try {
@@ -3490,6 +3496,16 @@ setInterval(async () => {
     try { await loadList(); } catch (e) { $('chList').innerHTML = `<div class="ch-empty">No se pudo cargar el chat: ${esc(e.message)}</div>`; }
     if (cur && cur.miembros) poll().catch(() => {});
   };
+  // Botón flotante: abre / cierra el chat sin salir de la pestaña en la que se está
+  const mostrar = abrirlo => {
+    $('tabChat').hidden = !abrirlo;
+    document.body.classList.toggle('ch-abierto', abrirlo);
+    $('chFab').setAttribute('aria-label', abrirlo ? 'Cerrar chat' : 'Abrir chat');
+    if (abrirlo) window.openChat();
+  };
+  $('chFab').onclick = () => mostrar($('tabChat').hidden);
+  $('chClose').onclick = () => mostrar(false);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal && !$('tabChat').hidden) mostrar(false); });
   // Con la solapa abierta: mensajes nuevos cada 4 s y la lista cada 16 s. En otra solapa: el contador cada 32 s.
   let tick = 0;
   setInterval(() => {
