@@ -3038,6 +3038,8 @@ setInterval(async () => {
     if (typeof L === 'undefined') return;
     if (!map) {
       map = L.map('olaMap', { center: [-34.458, -58.912], zoom: 12 });
+      // Tocar cualquier lugar vacío del mapa desmarca el punto seleccionado y cierra la ficha
+      map.on('click', () => { if (selKey) select(null, false); });
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 }).addTo(map);
     }
     if (layer) layer.remove();
