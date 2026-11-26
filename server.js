@@ -24,6 +24,8 @@ const LINKS_FILE    = process.env.LINKS_FILE || '/data/hyperlinks.json';
 const STATUS_FILE   = process.env.STATUS_FILE || '/data/statuses.json';
 const STATUS_LOG    = process.env.STATUS_LOG  || '/data/status_log.jsonl';
 const PHOTOS_DIR    = process.env.PHOTOS_DIR  || '/data/photos';
+// Cámaras de fases/olas anteriores (solo consulta): { "<ola>": { cargado, puntos: [...] } }
+const FASES_FILE    = process.env.FASES_FILE  || '/data/fases.json';
 const MAX_PHOTO_MB  = parseInt(process.env.MAX_PHOTO_MB || '10', 10);
 
 // SMTP para notificaciones (opcional; si SMTP_HOST no está, no envía)
@@ -657,6 +659,24 @@ const server = http.createServer(async (req, res) => {
     } catch (e) { return json(res, 400, { error: String(e) }); }
   }
 
+  // Carga de las cámaras de una ola anterior (reemplaza esa ola completa). Body: { ola, puntos: [...] }
+  if (m === 'POST' && url === '/api/fases/upload') {
+    if (!UPLOAD_SECRET || req.headers['x-upload-secret'] !== UPLOAD_SECRET) return json(res, 401, { error: 'Unauthorized' });
+    try {
+      const body = JSON.parse(String(await readBody(req)));
+      const ola = String(body.ola || '').trim();
+      if (!/^\d{1,2}$/.test(ola)) return json(res, 400, { error: 'ola inválida' });
+      const puntos = Array.isArray(body.puntos) ? body.puntos.filter(p => p && typeof p === 'object' && p.id != null) : [];
+      let all = {}; try { all = JSON.parse(fs.readFileSync(FASES_FILE, 'utf8')); } catch {}
+      if (fs.existsSync(FASES_FILE)) fs.copyFileSync(FASES_FILE, FASES_FILE + '.bak');
+      if (!puntos.length) delete all[ola];
+      else all[ola] = { cargado: new Date().toISOString(), puntos };
+      fs.writeFileSync(FASES_FILE, JSON.stringify(all));
+      console.log('[fases] ola', ola, '·', puntos.length, 'puntos');
+      return json(res, 200, { ok: true, ola, puntos: puntos.length });
+    } catch (e) { return json(res, 400, { error: String(e) }); }
+  }
+
   if (m === 'POST' && url === '/api/status/bulk') {
     if (!UPLOAD_SECRET || req.headers['x-upload-secret'] !== UPLOAD_SECRET) return json(res, 401, { error: 'Unauthorized' });
     try {
@@ -946,6 +966,17 @@ const server = http.createServer(async (req, res) => {
   // IDs visibles para un usuario de ISP (null = sin restricción). Se calcula una vez por request.
   let _scope;
   const scope = () => (_scope !== undefined ? _scope : (_scope = sess.isp ? idsForIsp(sess.isp) : null));
+  // Consulta de cámaras de olas anteriores. Un usuario de ISP solo recibe los puntos de su ISP.
+  if (m === 'GET' && url === '/api/fases') {
+    let all = {}; try { all = JSON.parse(fs.readFileSync(FASES_FILE, 'utf8')); } catch {}
+    const out = {};
+    for (const ola of Object.keys(all)) {
+      const o = all[ola] || {}, pts = Array.isArray(o.puntos) ? o.puntos : [];
+      out[ola] = { cargado: o.cargado, puntos: sess.isp ? pts.filter(p => String(p.isp || '').toUpperCase() === sess.isp) : pts };
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(out));
+  }
   if (m === 'GET' && url === '/cuenta') return serveFile(res, 'cuenta.html', 'text/html; charset=utf-8');
   if (m === 'GET' && url === '/admin') { if (!sess.isAdmin) return redirect(res, '/'); return serveFile(res, 'admin.html', 'text/html; charset=utf-8'); }
   if (m === 'GET' && (url === '/isp' || url === '/isp.html')) return serveFile(res, 'isp.html', 'text/html; charset=utf-8');

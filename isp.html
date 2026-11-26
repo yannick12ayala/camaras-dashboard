@@ -406,6 +406,31 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .pf-pop .r span:first-child{color:#777}
 .pf-pop .ok{color:#1E9E4A; font-weight:600}
 .pf-pop .no{color:#C13B2A; font-weight:600}
+/* Consulta de fases anteriores */
+.oc-filters select{min-width:150px}
+.oc-kpis{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px}
+.oc-kpi{background:var(--surf); border:1px solid var(--line); border-radius:10px; padding:8px 14px; font-size:12px; color:var(--muted)}
+.oc-kpi b{display:block; font:600 18px 'JetBrains Mono',monospace; color:var(--ink)}
+.oc-layout{display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:12px}
+#olaMap{width:100%; height:calc(100vh - 330px); min-height:420px; border:1px solid var(--line); border-radius:var(--radius); z-index:1}
+.oc-ficha{background:var(--surf); border:1px solid var(--line); border-radius:var(--radius); padding:14px; overflow:auto; max-height:calc(100vh - 330px); min-height:420px; font-size:13px}
+.oc-empty{color:var(--muted); padding:20px 4px; text-align:center}
+.oc-ficha h3{font-size:16px; margin:0 0 2px}
+.oc-ficha .oc-sub{color:var(--muted); font-size:12px; margin-bottom:10px}
+.oc-sec{margin-top:12px}
+.oc-sec h4{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 4px}
+.oc-row{display:flex; justify-content:space-between; gap:12px; padding:4px 0; border-bottom:1px solid var(--line)}
+.oc-row span:first-child{color:var(--muted)}
+.oc-row span:last-child{text-align:right; color:var(--ink)}
+.oc-ok{color:#22a565!important; font-weight:600}
+.oc-bad{color:#d64545!important; font-weight:600}
+.oc-ficha a.oc-gm{display:inline-block; margin-top:12px; padding:6px 12px; border-radius:6px; background:#2D6A4F; color:#fff; text-decoration:none; font-weight:600; font-size:12px}
+.oc-table-wrap{margin-top:14px}
+#ocTbl tbody tr{cursor:pointer}
+#ocTbl tbody tr.sel td{background:var(--accent-soft, rgba(77,142,240,.12))}
+.oc-pin{width:18px; height:18px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; font:700 10px/1 'JetBrains Mono',monospace; color:#fff}
+.oc-pin.sel{outline:3px solid #facc15}
+@media (max-width:900px){ .oc-layout{grid-template-columns:1fr} .oc-ficha{min-height:0; max-height:none} #olaMap{height:60vh} }
 .pf-pop a{display:inline-block; margin-top:8px; padding:5px 10px; border-radius:6px; background:#2D6A4F; color:#fff !important; text-decoration:none; font-weight:600}
 
 /* Exportar lotes (Excel / PDF) */
@@ -533,7 +558,47 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
   <nav class="tabs" id="tabs">
     <button class="tab active" data-tab="tabla">📋 Control de avance</button>
     <button class="tab" data-tab="mapa">🗺️ Mapa plan Fiberco LOTE 1</button>
+    <button class="tab" data-tab="consulta">🔎 Consulta fases anteriores</button>
   </nav>
+
+  <!-- Solapa: consulta de cámaras de olas/fases anteriores (solo lectura) -->
+  <section id="tabConsulta" hidden>
+    <div class="filters oc-filters">
+      <input type="search" id="ocQ" class="grow" placeholder="Buscar por ID, dirección, barrio, nodo o cámara…">
+      <select id="ocOla" aria-label="Ola"></select>
+      <select id="ocLoc" aria-label="Localidad"><option value="">Todas las localidades</option></select>
+      <select id="ocIsp" aria-label="ISP">
+        <option value="">Todos los ISP</option>
+        <option value="BIBOP">Bibop</option><option value="F2H">F2H</option>
+        <option value="TELVISO">Telviso</option><option value="METROTEL">Metrotel</option>
+        <option value="__SIN__">Sin dato de ISP</option>
+      </select>
+      <select id="ocEst" aria-label="Estado">
+        <option value="">Todos los estados</option>
+        <option value="up">Funcionando (UP)</option>
+        <option value="prob">DOWN</option>
+        <option value="nd">Sin dato</option>
+      </select>
+    </div>
+    <div class="oc-kpis" id="ocKpis"></div>
+    <div class="oc-layout">
+      <div id="olaMap"></div>
+      <aside class="oc-ficha" id="ocFicha"><div class="oc-empty">Tocá un punto del mapa o una fila de la tabla para ver su ficha.</div></aside>
+    </div>
+    <div class="pm-legend">
+      <span><span class="dot" style="background:#22a565"></span>Funcionando (UP)</span>
+      <span><span class="dot" style="background:#d64545"></span>DOWN</span>
+      <span><span class="dot" style="background:#8b90a7"></span>Sin dato</span>
+      <span>El número dentro del punto indica 2 cámaras.</span>
+    </div>
+    <div class="tbl-wrap oc-table-wrap"><div class="tbl-scroll">
+      <table id="ocTbl">
+        <thead><tr><th>ID</th><th>Ola</th><th>Dirección</th><th>Barrio</th><th>Localidad</th><th>ISP</th><th>Nodo</th><th>Cám.</th><th>Instalación</th><th>Monitoreo</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div></div>
+    <div class="pm-note" id="ocNote"></div>
+  </section>
 
   <!-- Solapa: mapa del plan Fiberco -->
   <section id="tabMapa" hidden>
@@ -2583,7 +2648,9 @@ setInterval(async () => {
     document.querySelectorAll('#tabs .tab').forEach(t => t.classList.toggle('active', t === b));
     const mapa = b.dataset.tab === 'mapa';
     $('tabMapa').hidden = !mapa;
-    $('tabTabla').hidden = mapa;
+    $('tabTabla').hidden = b.dataset.tab !== 'tabla';
+    $('tabConsulta').hidden = b.dataset.tab !== 'consulta';
+    if (b.dataset.tab === 'consulta' && window.openConsulta) window.openConsulta();
     if (mapa) { drawSafe(); setTimeout(() => map && map.invalidateSize(), 50); }
   });
   $('pmIsp').addEventListener('click', e => {
@@ -2879,6 +2946,114 @@ setInterval(async () => {
   ov.addEventListener('click', e => { if (e.target === ov) ov.style.display = 'none'; });
   $('expXls').addEventListener('click', () => run(exportXls, 'Excel'));
   $('expPdf').addEventListener('click', () => run(exportPdf, 'PDF'));
+})();
+
+// ── Consulta de cámaras de fases/olas anteriores (solo lectura) ─────────
+// Datos en /api/fases (cargados desde el Excel de cada ola). Un ISP ve solo los suyos.
+(function(){
+  const NAMES = { BIBOP: 'Bibop', F2H: 'F2H', TELVISO: 'Telviso', METROTEL: 'Metrotel' };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let PTS = [], loaded = false, map = null, layer = null, fitted = false, selKey = '';
+  const key = p => p.ola + '-' + p.id;
+  const code = p => 'O' + p.ola + '-' + String(p.id).padStart(3, '0');
+  // El color sale del monitoreo (dato más reciente del Excel)
+  const estado = p => p.monitoreo === 'UP' ? 'up' : (p.monitoreo === 'DOWN' ? 'prob' : 'nd');
+  const COLOR = { up: '#22a565', prob: '#d64545', nd: '#8b90a7' };
+  const sino = v => v === 'SI' ? '<span class="oc-ok">SÍ</span>' : v === 'NO' ? '<span class="oc-bad">NO</span>' : (v ? esc(v) : '—');
+  const val = v => (v === '' || v == null) ? '—' : esc(v);
+
+  async function load(){
+    try {
+      const r = await fetch('/api/fases', { cache: 'no-store' });
+      const d = r.ok ? await r.json() : {};
+      PTS = [];
+      Object.keys(d).sort().forEach(ola => (d[ola].puntos || []).forEach(p => PTS.push({ ...p, ola })));
+      const olas = Object.keys(d).sort();
+      $('ocOla').innerHTML = (olas.length > 1 ? '<option value="">Todas las olas</option>' : '') + olas.map(o => `<option value="${o}">Ola ${o} (${(d[o].puntos || []).length})</option>`).join('');
+      const locs = [...new Set(PTS.map(p => p.loc).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+      $('ocLoc').innerHTML = '<option value="">Todas las localidades</option>' + locs.map(l => `<option>${esc(l)}</option>`).join('');
+      const carg = olas.map(o => d[o].cargado ? `Ola ${o}: datos del ${new Date(d[o].cargado).toLocaleDateString('es-AR')}` : '').filter(Boolean).join(' · ');
+      $('ocNote').textContent = PTS.length ? 'Solo consulta. ' + carg + '.' : '';
+      loaded = true;
+    } catch (e) { $('ocNote').textContent = 'No se pudieron cargar los datos: ' + e.message; }
+  }
+  function filtrados(){
+    const q = $('ocQ').value.trim().toLowerCase(), ola = $('ocOla').value, loc = $('ocLoc').value, isp = $('ocIsp').value, est = $('ocEst').value;
+    return PTS.filter(p => (!ola || p.ola === ola) && (!loc || p.loc === loc) &&
+      (!isp || (isp === '__SIN__' ? !p.isp : p.isp === isp)) && (!est || estado(p) === est) &&
+      (!q || [p.id, code(p), p.dir, p.barrio, p.loc, p.nodo, p.milestone, p.gab].some(v => String(v == null ? '' : v).toLowerCase().includes(q))));
+  }
+  function ficha(p){
+    if (!p) { $('ocFicha').innerHTML = '<div class="oc-empty">Tocá un punto del mapa o una fila de la tabla para ver su ficha.</div>'; return; }
+    const e = estado(p);
+    const row = (k, v) => `<div class="oc-row"><span>${k}</span><span>${v}</span></div>`;
+    $('ocFicha').innerHTML = `
+      <h3>${code(p)} · ${val(p.dir)}</h3>
+      <div class="oc-sub">Ola ${p.ola} · ID ${p.id} · <span style="color:${COLOR[e]};font-weight:600">${e === 'up' ? 'Funcionando' : e === 'prob' ? 'DOWN' : 'Sin dato de monitoreo'}</span></div>
+      <div class="oc-sec"><h4>Ubicación</h4>
+        ${row('Dirección', val(p.dir))}${row('Barrio', val(p.barrio))}${row('Localidad', val(p.loc))}
+        ${row('Coordenada', `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`)}</div>
+      <div class="oc-sec"><h4>Equipamiento</h4>
+        ${row('Cant. cámaras', val(p.cams))}${row('Ancho de banda req.', p.ab ? esc(p.ab) + ' Mb' : '—')}
+        ${row('N° gabinete', val(p.gab))}${row('Zona', val(p.zona))}
+        ${row('Fecha programada', val(p.programada))}${row('Fecha de instalación', val(p.fechaInst))}</div>
+      <div class="oc-sec"><h4>Conectividad</h4>
+        ${row('ISP', p.isp ? esc(NAMES[p.isp] || p.isp) : '<span style="color:var(--muted)">Sin dato</span>')}${row('Nodo ADM', val(p.nodo))}
+        ${row('Física', sino(p.fisica))}${row('Lógica (anda)', sino(p.logica))}${row('Fecha de conexión', val(p.fechaConect))}</div>
+      <div class="oc-sec"><h4>COM / Milestone</h4>
+        ${row('Nombre cámara', val(p.milestone))}${row('Instalación física', sino(p.comFisica))}
+        ${row('Imagen', sino(p.imagen))}${row('Fecha operativa', val(p.operativa))}
+        ${row('Monitoreo', p.monitoreo === 'UP' ? '<span class="oc-ok">UP</span>' : p.monitoreo === 'DOWN' ? '<span class="oc-bad">DOWN</span>' : val(p.monitoreo))}</div>
+      <a class="oc-gm" href="https://www.google.com/maps?q=${p.lat.toFixed(6)},${p.lon.toFixed(6)}" target="_blank" rel="noopener">Ver en Google Maps</a>`;
+  }
+  function select(p, pan){
+    selKey = p ? key(p) : '';
+    ficha(p);
+    document.querySelectorAll('#ocTbl tbody tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.k === selKey));
+    if (layer) layer.eachLayer(mk => { const el = mk.getElement && mk.getElement(); if (el && el.firstChild) el.firstChild.classList.toggle('sel', mk._ocKey === selKey); });
+    if (p && pan && map) map.setView([p.lat, p.lon], Math.max(map.getZoom(), 16));
+    if (p && pan && window.innerWidth <= 900) $('ocFicha').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function render(){
+    const vis = filtrados();
+    const n = a => a.length;
+    const up = vis.filter(p => estado(p) === 'up'), pr = vis.filter(p => estado(p) === 'prob');
+    $('ocKpis').innerHTML = [['Puntos', n(vis)], ['Cámaras', vis.reduce((s, p) => s + (p.cams || 0), 0)], ['Funcionando (UP)', n(up)], ['DOWN', n(pr)], ['Sin dato', n(vis) - n(up) - n(pr)]]
+      .map(([k, v]) => `<div class="oc-kpi">${k}<b>${v}</b></div>`).join('');
+    const tb = $('ocTbl').tBodies[0];
+    tb.innerHTML = vis.length ? vis.map(p => `<tr data-k="${key(p)}"${key(p) === selKey ? ' class="sel"' : ''}>
+      <td class="mono">${code(p)}</td><td>${p.ola}</td><td>${val(p.dir)}</td><td>${val(p.barrio)}</td><td>${val(p.loc)}</td>
+      <td>${p.isp ? esc(NAMES[p.isp] || p.isp) : '—'}</td><td class="mono">${val(p.nodo)}</td><td>${val(p.cams)}</td><td>${val(p.fechaInst)}</td>
+      <td style="color:${COLOR[estado(p)]};font-weight:600">${val(p.monitoreo)}</td></tr>`).join('')
+      : `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">${PTS.length ? 'No hay puntos con esos filtros.' : 'Todavía no hay datos cargados de fases anteriores.'}</td></tr>`;
+    if (typeof L === 'undefined') return;
+    if (!map) {
+      map = L.map('olaMap', { center: [-34.458, -58.912], zoom: 12 });
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 }).addTo(map);
+    }
+    if (layer) layer.remove();
+    layer = L.featureGroup().addTo(map);
+    vis.forEach(p => {
+      if (!isFinite(p.lat) || !isFinite(p.lon)) return;
+      const icon = L.divIcon({ className: '', iconSize: [18, 18], iconAnchor: [9, 9],
+        html: `<div class="oc-pin${key(p) === selKey ? ' sel' : ''}" style="background:${COLOR[estado(p)]}">${p.cams > 1 ? p.cams : ''}</div>` });
+      const mk = L.marker([p.lat, p.lon], { icon, title: code(p) + ' · ' + (p.dir || '') });
+      mk._ocKey = key(p);
+      mk.on('click', () => select(p, false));
+      mk.addTo(layer);
+    });
+    if (!fitted && vis.length) { map.fitBounds(layer.getBounds().pad(0.05)); fitted = true; }
+  }
+  window.openConsulta = async () => {
+    if (!loaded) await load();
+    render();
+    setTimeout(() => map && map.invalidateSize(), 50);
+  };
+  ['ocQ', 'ocOla', 'ocLoc', 'ocIsp', 'ocEst'].forEach(id => $(id).addEventListener(id === 'ocQ' ? 'input' : 'change', () => { fitted = id === 'ocQ'; render(); }));
+  $('ocTbl').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-k]'); if (!tr) return;
+    select(PTS.find(p => key(p) === tr.dataset.k), true);
+  });
 })();
 
 </script>
