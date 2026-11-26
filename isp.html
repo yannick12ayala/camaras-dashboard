@@ -411,7 +411,8 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .pf-pop .no{color:#C13B2A; font-weight:600}
 /* Consulta de fases anteriores */
 .oc-filters select{min-width:150px}
-.oc-kpis{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px}
+.oc-topbar{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin:0 0 12px}
+.oc-kpis{display:flex; flex-wrap:wrap; gap:8px}
 .oc-kpi{background:var(--surf); border:1px solid var(--line); border-radius:10px; padding:8px 14px; font-size:12px; color:var(--muted)}
 .oc-kpi b{display:block; font:600 18px 'JetBrains Mono',monospace; color:var(--ink)}
 .oc-layout{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
@@ -587,7 +588,13 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
         <option value="nd">Sin dato</option>
       </select>
     </div>
-    <div class="oc-kpis" id="ocKpis"></div>
+    <div class="oc-topbar">
+      <div class="oc-kpis" id="ocKpis"></div>
+      <div class="pm-group">
+        <button class="pm-btn pm-xls" id="ocXls" title="Descargar en Excel los puntos que se ven con los filtros actuales">⬇ Excel</button>
+        <button class="pm-btn pm-pdf" id="ocPdf" title="Descargar en PDF los puntos que se ven con los filtros actuales">⬇ PDF</button>
+      </div>
+    </div>
     <div class="oc-layout">
       <div id="olaMap"></div>
       <aside class="oc-ficha" id="ocFicha"><div class="oc-empty">Tocá un punto del mapa o una fila de la tabla para ver su ficha.</div></aside>
@@ -3078,6 +3085,99 @@ setInterval(async () => {
     const tr = e.target.closest('tr[data-k]'); if (!tr) return;
     select(PTS.find(p => key(p) === tr.dataset.k), true);
   });
+
+  // ── Exportar (Excel / PDF) los puntos visibles con los filtros actuales, separados por fase ──
+  const XHEAD = ['Fase', 'Lote', 'ID', 'Dirección', 'Barrio', 'Localidad', 'Coordenada', 'Cant. cámaras', 'Ancho de banda (Mb)',
+    'N° gabinete', 'Zona', 'Fecha programada', 'Fecha de instalación', 'ISP', 'Nodo ADM', 'Enlace', 'Física', 'Lógica',
+    'Fecha de conexión', 'Nombre cámara', 'Instalación física COM', 'Imagen', 'Fecha operativa', 'Monitoreo'];
+  const xrow = p => ['Fase ' + p.ola, p.lote || '', p.id, p.dir || '', p.barrio || '', p.loc || '',
+    geo(p) ? p.lat.toFixed(6) + ', ' + p.lon.toFixed(6) : 'Sin coordenada', p.cams || '', p.ab || '', p.gab || '', p.zona || '',
+    p.programada || '', p.fechaInst || '', NAMES[p.isp] || p.isp || '', p.nodo || '', p.enlace || '', p.fisica || '', p.logica || '',
+    p.fechaConect || '', p.milestone || '', p.comFisica || '', p.imagen || '', p.operativa || '', p.monitoreo || ''];
+  function porFase(){
+    const vis = filtrados(), g = {};
+    vis.forEach(p => (g[p.ola] = g[p.ola] || []).push(p));
+    return Object.keys(g).sort((a, b) => a - b).map(f => ({ fase: f, rows: g[f].slice().sort((a, b) => a.id - b.id) }));
+  }
+  function xsufijo(){
+    const d = new Date(), z = n => String(n).padStart(2, '0');
+    const f = $('ocOla').value, isp = $('ocIsp').value, loc = $('ocLoc').value;
+    return (f ? '_Fase' + f : '_Fases') + (isp ? '_' + (isp === '__SIN__' ? 'SinISP' : (NAMES[isp] || isp)) : '') +
+      (loc ? '_' + loc.replace(/[^\wÁÉÍÓÚÑáéíóúñ]+/g, '') : '') + '_' + d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate());
+  }
+  const filtroTxt = () => {
+    const t = [];
+    if ($('ocLoc').value) t.push('Localidad: ' + $('ocLoc').value);
+    if ($('ocIsp').value) t.push('ISP: ' + ($('ocIsp').value === '__SIN__' ? 'sin dato' : (NAMES[$('ocIsp').value] || $('ocIsp').value)));
+    if ($('ocEst').value) t.push('Estado: ' + $('ocEst').selectedOptions[0].textContent);
+    if ($('ocQ').value.trim()) t.push('Búsqueda: "' + $('ocQ').value.trim() + '"');
+    return t.join(' · ');
+  };
+  function ocXls(){
+    const gs = porFase(); if (!gs.length) { alert('No hay puntos con estos filtros.'); return; }
+    const wb = XLSX.utils.book_new();
+    const isps = ['F2H', 'TELVISO', 'METROTEL', 'BIBOP'];
+    const res = [['Fase', 'Puntos', 'Cámaras', ...isps.map(i => NAMES[i]), 'Sin ISP', 'UP', 'DOWN', 'Sin dato monitoreo', 'Sin coordenada']];
+    gs.forEach(g => res.push(['Fase ' + g.fase, g.rows.length, g.rows.reduce((s, p) => s + (p.cams || 0), 0),
+      ...isps.map(i => g.rows.filter(p => p.isp === i).length), g.rows.filter(p => !p.isp).length,
+      g.rows.filter(p => estado(p) === 'up').length, g.rows.filter(p => estado(p) === 'prob').length,
+      g.rows.filter(p => estado(p) === 'nd').length, g.rows.filter(p => !geo(p)).length]));
+    if (filtroTxt()) res.push([], ['Filtros aplicados: ' + filtroTxt()]);
+    const wsR = XLSX.utils.aoa_to_sheet(res); wsR['!cols'] = res[0].map((_, i) => ({ wch: i ? 12 : 10 }));
+    XLSX.utils.book_append_sheet(wb, wsR, 'Resumen');
+    gs.forEach(g => {
+      const ws = XLSX.utils.aoa_to_sheet([XHEAD, ...g.rows.map(xrow)]);
+      g.rows.forEach((p, i) => { if (geo(p)) ws[XLSX.utils.encode_cell({ r: i + 1, c: 6 })].l = { Target: `https://www.google.com/maps?q=${p.lat.toFixed(6)},${p.lon.toFixed(6)}` }; });
+      ws['!cols'] = [7, 16, 6, 32, 20, 15, 22, 8, 9, 10, 14, 11, 11, 9, 16, 12, 6, 6, 11, 16, 9, 7, 11, 9].map(w => ({ wch: w }));
+      ws['!autofilter'] = { ref: ws['!ref'] };
+      XLSX.utils.book_append_sheet(wb, ws, 'Fase ' + g.fase);
+    });
+    XLSX.writeFile(wb, 'Consulta' + xsufijo() + '.xlsx');
+  }
+  const cargarJs = src => new Promise((ok, err) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => err(new Error('No se pudo cargar ' + src)); document.head.appendChild(s); });
+  async function ocPdf(){
+    const gs = porFase(); if (!gs.length) { alert('No hay puntos con estos filtros.'); return; }
+    if (!window.jspdf) await cargarJs('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    if (!window.jspdf.jsPDF.API.autoTable) await cargarJs('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+    const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const head = ['ID', 'Lote', 'Dirección', 'Barrio', 'Localidad', 'ISP', 'Nodo ADM', 'N° gab.', 'Cám.', 'Instalación', 'Nombre cámara', 'Operativa', 'Monitoreo'];
+    const body = p => [p.id, p.lote || '', p.dir || '', p.barrio || '', p.loc || '', NAMES[p.isp] || p.isp || '', p.nodo || '', p.gab || '',
+      p.cams || '', p.fechaInst || '', p.milestone || '', p.operativa || '', p.monitoreo || 'Sin dato'];
+    gs.forEach((g, i) => {
+      if (i > 0) doc.addPage();
+      const up = g.rows.filter(p => estado(p) === 'up').length;
+      doc.setFontSize(14); doc.setTextColor(20); doc.text('Cámaras de la Fase ' + g.fase + ' · Consulta', 10, 12);
+      doc.setFontSize(10); doc.setTextColor(80);
+      doc.text(`${g.rows.length} puntos · ${g.rows.reduce((s, p) => s + (p.cams || 0), 0)} cámaras · ${up} UP` + (filtroTxt() ? ' · ' + filtroTxt() : ''), 10, 18, { maxWidth: 277 });
+      doc.autoTable({
+        startY: 23, head: [head], body: g.rows.map(body),
+        styles: { fontSize: 7, cellPadding: 1.3, overflow: 'linebreak' },
+        headStyles: { fillColor: [45, 106, 79], fontSize: 7.5 },
+        alternateRowStyles: { fillColor: [246, 245, 241] },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 11 }, 1: { cellWidth: 22 }, 2: { cellWidth: 48 } },
+        didParseCell: d => {
+          if (d.section !== 'body' || d.column.index !== head.length - 1) return;
+          d.cell.styles.textColor = d.cell.raw === 'UP' ? [30, 158, 74] : d.cell.raw === 'DOWN' ? [193, 59, 42] : [120, 120, 120];
+          d.cell.styles.fontStyle = 'bold';
+        },
+        margin: { left: 8, right: 8, bottom: 12 },
+      });
+    });
+    const pages = doc.getNumberOfPages();
+    const gen = 'Generado ' + fmtDateTime(new Date().toISOString()) + ' · Municipalidad de Pilar · Consulta de fases anteriores';
+    for (let p = 1; p <= pages; p++) {
+      doc.setPage(p); doc.setFontSize(7); doc.setTextColor(120);
+      doc.text(gen, 8, 205); doc.text('Página ' + p + ' de ' + pages, 289, 205, { align: 'right' });
+    }
+    doc.save('Consulta' + xsufijo() + '.pdf');
+  }
+  async function correrOc(btn, fn){
+    const txt = btn.textContent; btn.disabled = true; btn.textContent = 'Generando…';
+    try { await fn(); } catch (e) { console.error(e); alert('No se pudo generar el archivo: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = txt; }
+  }
+  $('ocXls').addEventListener('click', e => correrOc(e.currentTarget, ocXls));
+  $('ocPdf').addEventListener('click', e => correrOc(e.currentTarget, ocPdf));
 })();
 
 </script>
