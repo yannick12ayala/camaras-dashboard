@@ -414,7 +414,9 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .oc-kpis{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px}
 .oc-kpi{background:var(--surf); border:1px solid var(--line); border-radius:10px; padding:8px 14px; font-size:12px; color:var(--muted)}
 .oc-kpi b{display:block; font:600 18px 'JetBrains Mono',monospace; color:var(--ink)}
-.oc-layout{display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:12px}
+.oc-layout{display:grid; grid-template-columns:minmax(0,1fr); gap:12px}
+.oc-layout.has-ficha{grid-template-columns:minmax(0,1fr) 340px}
+.oc-layout:not(.has-ficha) .oc-ficha{display:none}
 #olaMap{width:100%; height:calc(100vh - 330px); min-height:420px; border:1px solid var(--line); border-radius:var(--radius); z-index:1}
 .oc-ficha{background:var(--surf); border:1px solid var(--line); border-radius:var(--radius); padding:14px; overflow:auto; max-height:calc(100vh - 330px); min-height:420px; font-size:13px}
 .oc-empty{color:var(--muted); padding:20px 4px; text-align:center}
@@ -435,7 +437,7 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .oc-fase.f4{background:rgba(168,85,247,.12); color:#9b4ee0; border-color:#9b4ee0}
 .oc-pin{width:20px; height:20px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; font:700 10px/1 'JetBrains Mono',monospace; color:#fff}
 .oc-pin.sel{outline:3px solid #facc15}
-@media (max-width:900px){ .oc-layout{grid-template-columns:1fr} .oc-ficha{min-height:0; max-height:none} #olaMap{height:60vh} }
+@media (max-width:900px){ .oc-layout, .oc-layout.has-ficha{grid-template-columns:1fr} .oc-ficha{min-height:0; max-height:none} #olaMap{height:60vh} }
 .pf-pop a{display:inline-block; margin-top:8px; padding:5px 10px; border-radius:6px; background:#2D6A4F; color:#fff !important; text-decoration:none; font-weight:600}
 
 /* Exportar lotes (Excel / PDF) */
@@ -2993,7 +2995,13 @@ setInterval(async () => {
       (!q || [p.id, p.dir, p.barrio, p.loc, p.nodo, p.milestone, p.gab].some(v => String(v == null ? '' : v).toLowerCase().includes(q))));
   }
   function ficha(p){
-    if (!p) { $('ocFicha').innerHTML = '<div class="oc-empty">Tocá un punto del mapa o una fila de la tabla para ver su ficha.</div>'; return; }
+    // La barra lateral solo se muestra con un punto seleccionado; el mapa se ajusta al nuevo ancho
+    const lay = document.querySelector('#tabConsulta .oc-layout');
+    if (lay.classList.contains('has-ficha') !== !!p) {
+      lay.classList.toggle('has-ficha', !!p);
+      if (map) setTimeout(() => map.invalidateSize(), 0);
+    }
+    if (!p) { $('ocFicha').innerHTML = ''; return; }
     const e = estado(p);
     const row = (k, v) => `<div class="oc-row"><span>${k}</span><span>${v}</span></div>`;
     $('ocFicha').innerHTML = `
