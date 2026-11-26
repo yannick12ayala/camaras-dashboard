@@ -2962,7 +2962,7 @@ setInterval(async () => {
 (function(){
   const NAMES = { BIBOP: 'Bibop', F2H: 'F2H', TELVISO: 'Telviso', METROTEL: 'Metrotel' };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  let PTS = [], loaded = false, map = null, layer = null, fitted = false, selKey = '';
+  let PTS = [], loaded = false, map = null, layer = null, fitted = false, selKey = '', prevView = null;
   const key = p => p.ola + '-' + p.id;
   const code = p => 'ID ' + p.id;
   const geo = p => typeof p.lat === 'number' && typeof p.lon === 'number' && isFinite(p.lat) && isFinite(p.lon);
@@ -3030,6 +3030,9 @@ setInterval(async () => {
     ficha(p);
     document.querySelectorAll('#ocTbl tbody tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.k === selKey));
     if (layer) layer.eachLayer(mk => { const el = mk.getElement && mk.getElement(); if (el && el.firstChild) el.firstChild.classList.toggle('sel', mk._ocKey === selKey); });
+    // Antes de acercarse a un punto se guarda la vista; al deseleccionar se vuelve a ella
+    if (!p && map && prevView) { map.setView(prevView.c, prevView.z); prevView = null; }
+    if (p && pan && map && geo(p) && !prevView) prevView = { c: map.getCenter(), z: map.getZoom() };
     if (p && pan && map && geo(p)) map.setView([p.lat, p.lon], Math.max(map.getZoom(), 16));
     if (p && pan && window.innerWidth <= 900) $('ocFicha').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -3070,7 +3073,7 @@ setInterval(async () => {
     render();
     setTimeout(() => map && map.invalidateSize(), 50);
   };
-  ['ocQ', 'ocOla', 'ocLoc', 'ocIsp', 'ocEst'].forEach(id => $(id).addEventListener(id === 'ocQ' ? 'input' : 'change', () => { fitted = id === 'ocQ'; render(); }));
+  ['ocQ', 'ocOla', 'ocLoc', 'ocIsp', 'ocEst'].forEach(id => $(id).addEventListener(id === 'ocQ' ? 'input' : 'change', () => { fitted = id === 'ocQ'; if (!fitted) prevView = null; render(); }));
   $('ocTbl').addEventListener('click', e => {
     const tr = e.target.closest('tr[data-k]'); if (!tr) return;
     select(PTS.find(p => key(p) === tr.dataset.k), true);
