@@ -83,6 +83,9 @@ body{
 .theme-btn:hover, .reset-btn:hover{border-color:var(--ink-2)}
 .reset-btn{color:var(--bad); border-color:color-mix(in oklab,var(--bad) 30%,var(--line))}
 .reset-btn:hover{background:var(--bad-soft)}
+/* "Restablecer" (encabezado): solo el administrador lo ve */
+.reset-btn{display:none}
+body.is-admin .reset-btn{display:inline-block}
 
 /* Filters */
 .filters{display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap; padding:12px 14px; background:var(--surf); border:1px solid var(--line); border-radius:var(--radius)}
@@ -428,7 +431,9 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .oc-table-wrap{margin-top:14px}
 #ocTbl tbody tr{cursor:pointer}
 #ocTbl tbody tr.sel td{background:var(--accent-soft, rgba(77,142,240,.12))}
-.oc-pin{width:18px; height:18px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; font:700 10px/1 'JetBrains Mono',monospace; color:#fff}
+.oc-fase{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent)}
+.oc-fase.f4{background:rgba(168,85,247,.12); color:#9b4ee0; border-color:#9b4ee0}
+.oc-pin{width:20px; height:20px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; font:700 10px/1 'JetBrains Mono',monospace; color:#fff}
 .oc-pin.sel{outline:3px solid #facc15}
 @media (max-width:900px){ .oc-layout{grid-template-columns:1fr} .oc-ficha{min-height:0; max-height:none} #olaMap{height:60vh} }
 .pf-pop a{display:inline-block; margin-top:8px; padding:5px 10px; border-radius:6px; background:#2D6A4F; color:#fff !important; text-decoration:none; font-weight:600}
@@ -564,8 +569,8 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
   <!-- Solapa: consulta de cámaras de olas/fases anteriores (solo lectura) -->
   <section id="tabConsulta" hidden>
     <div class="filters oc-filters">
-      <input type="search" id="ocQ" class="grow" placeholder="Buscar por ID, dirección, barrio, nodo o cámara…">
-      <select id="ocOla" aria-label="Ola"></select>
+      <input type="search" id="ocQ" class="grow" placeholder="Buscar por ID, dirección, barrio, nodo, gabinete o cámara…">
+      <select id="ocOla" aria-label="Fase"></select>
       <select id="ocLoc" aria-label="Localidad"><option value="">Todas las localidades</option></select>
       <select id="ocIsp" aria-label="ISP">
         <option value="">Todos los ISP</option>
@@ -589,11 +594,12 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
       <span><span class="dot" style="background:#22a565"></span>Funcionando (UP)</span>
       <span><span class="dot" style="background:#d64545"></span>DOWN</span>
       <span><span class="dot" style="background:#8b90a7"></span>Sin dato</span>
-      <span>El número dentro del punto indica 2 cámaras.</span>
+      <span>El número dentro de cada punto es la fase a la que pertenece.</span>
     </div>
+    <div class="pm-note" id="ocSinGeo"></div>
     <div class="tbl-wrap oc-table-wrap"><div class="tbl-scroll">
       <table id="ocTbl">
-        <thead><tr><th>ID</th><th>Ola</th><th>Dirección</th><th>Barrio</th><th>Localidad</th><th>ISP</th><th>Nodo</th><th>Cám.</th><th>Instalación</th><th>Monitoreo</th></tr></thead>
+        <thead><tr><th>ID</th><th>Fase</th><th>Dirección</th><th>Barrio</th><th>Localidad</th><th>ISP</th><th>Nodo</th><th>Cám.</th><th>Instalación</th><th>Monitoreo</th></tr></thead>
         <tbody></tbody>
       </table>
     </div></div>
@@ -914,6 +920,7 @@ $('clear').addEventListener('click', () => {
   render();
 });
 $('resetBtn').addEventListener('click', () => {
+  if (!window.IS_ADMIN) return;
   if(!confirm('¿Restablecer todos los estados de Postes/Gabinete/Conectividad a los valores originales del Excel?')) return;
   overrides = {}; saveOverrides(overrides);
   for(const r of DATA){ r._st = {...r._seed}; }
@@ -2955,7 +2962,9 @@ setInterval(async () => {
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let PTS = [], loaded = false, map = null, layer = null, fitted = false, selKey = '';
   const key = p => p.ola + '-' + p.id;
-  const code = p => 'O' + p.ola + '-' + String(p.id).padStart(3, '0');
+  const code = p => 'ID ' + p.id;
+  const geo = p => typeof p.lat === 'number' && typeof p.lon === 'number' && isFinite(p.lat) && isFinite(p.lon);
+  const faseTag = p => `<span class="oc-fase f${esc(p.ola)}">Fase ${esc(p.ola)}</span>`;
   // El color sale del monitoreo (dato más reciente del Excel)
   const estado = p => p.monitoreo === 'UP' ? 'up' : (p.monitoreo === 'DOWN' ? 'prob' : 'nd');
   const COLOR = { up: '#22a565', prob: '#d64545', nd: '#8b90a7' };
@@ -2969,10 +2978,10 @@ setInterval(async () => {
       PTS = [];
       Object.keys(d).sort().forEach(ola => (d[ola].puntos || []).forEach(p => PTS.push({ ...p, ola })));
       const olas = Object.keys(d).sort();
-      $('ocOla').innerHTML = (olas.length > 1 ? '<option value="">Todas las olas</option>' : '') + olas.map(o => `<option value="${o}">Ola ${o} (${(d[o].puntos || []).length})</option>`).join('');
+      $('ocOla').innerHTML = (olas.length > 1 ? `<option value="">Todas las fases (${PTS.length})</option>` : '') + olas.map(o => `<option value="${esc(o)}">Fase ${esc(o)} (${(d[o].puntos || []).length})</option>`).join('');
       const locs = [...new Set(PTS.map(p => p.loc).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
       $('ocLoc').innerHTML = '<option value="">Todas las localidades</option>' + locs.map(l => `<option>${esc(l)}</option>`).join('');
-      const carg = olas.map(o => d[o].cargado ? `Ola ${o}: datos del ${new Date(d[o].cargado).toLocaleDateString('es-AR')}` : '').filter(Boolean).join(' · ');
+      const carg = olas.map(o => d[o].cargado ? `Fase ${esc(o)}: datos del ${new Date(d[o].cargado).toLocaleDateString('es-AR')}` : '').filter(Boolean).join(' · ');
       $('ocNote').textContent = PTS.length ? 'Solo consulta. ' + carg + '.' : '';
       loaded = true;
     } catch (e) { $('ocNote').textContent = 'No se pudieron cargar los datos: ' + e.message; }
@@ -2981,7 +2990,7 @@ setInterval(async () => {
     const q = $('ocQ').value.trim().toLowerCase(), ola = $('ocOla').value, loc = $('ocLoc').value, isp = $('ocIsp').value, est = $('ocEst').value;
     return PTS.filter(p => (!ola || p.ola === ola) && (!loc || p.loc === loc) &&
       (!isp || (isp === '__SIN__' ? !p.isp : p.isp === isp)) && (!est || estado(p) === est) &&
-      (!q || [p.id, code(p), p.dir, p.barrio, p.loc, p.nodo, p.milestone, p.gab].some(v => String(v == null ? '' : v).toLowerCase().includes(q))));
+      (!q || [p.id, p.dir, p.barrio, p.loc, p.nodo, p.milestone, p.gab].some(v => String(v == null ? '' : v).toLowerCase().includes(q))));
   }
   function ficha(p){
     if (!p) { $('ocFicha').innerHTML = '<div class="oc-empty">Tocá un punto del mapa o una fila de la tabla para ver su ficha.</div>'; return; }
@@ -2989,29 +2998,31 @@ setInterval(async () => {
     const row = (k, v) => `<div class="oc-row"><span>${k}</span><span>${v}</span></div>`;
     $('ocFicha').innerHTML = `
       <h3>${code(p)} · ${val(p.dir)}</h3>
-      <div class="oc-sub">Ola ${p.ola} · ID ${p.id} · <span style="color:${COLOR[e]};font-weight:600">${e === 'up' ? 'Funcionando' : e === 'prob' ? 'DOWN' : 'Sin dato de monitoreo'}</span></div>
+      <div class="oc-sub">${faseTag(p)} · <span style="color:${COLOR[e]};font-weight:600">${e === 'up' ? 'Funcionando' : e === 'prob' ? 'DOWN' : 'Sin dato de monitoreo'}</span></div>
+      <div class="oc-sec"><h4>Proyecto</h4>
+        ${row('Fase', 'Fase ' + esc(p.ola))}${p.lote ? row('Lote', val(p.lote)) : ''}</div>
       <div class="oc-sec"><h4>Ubicación</h4>
         ${row('Dirección', val(p.dir))}${row('Barrio', val(p.barrio))}${row('Localidad', val(p.loc))}
-        ${row('Coordenada', `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`)}</div>
+        ${row('Coordenada', geo(p) ? `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}` : '<span class="oc-bad">Sin coordenada en el Excel</span>')}</div>
       <div class="oc-sec"><h4>Equipamiento</h4>
         ${row('Cant. cámaras', val(p.cams))}${row('Ancho de banda req.', p.ab ? esc(p.ab) + ' Mb' : '—')}
         ${row('N° gabinete', val(p.gab))}${row('Zona', val(p.zona))}
         ${row('Fecha programada', val(p.programada))}${row('Fecha de instalación', val(p.fechaInst))}</div>
       <div class="oc-sec"><h4>Conectividad</h4>
-        ${row('ISP', p.isp ? esc(NAMES[p.isp] || p.isp) : '<span style="color:var(--muted)">Sin dato</span>')}${row('Nodo ADM', val(p.nodo))}
+        ${row('ISP', p.isp ? esc(NAMES[p.isp] || p.isp) : '<span style="color:var(--muted)">Sin dato</span>')}${row('Nodo ADM', val(p.nodo))}${p.enlace ? row('Enlace', val(p.enlace)) : ''}
         ${row('Física', sino(p.fisica))}${row('Lógica (anda)', sino(p.logica))}${row('Fecha de conexión', val(p.fechaConect))}</div>
       <div class="oc-sec"><h4>COM / Milestone</h4>
         ${row('Nombre cámara', val(p.milestone))}${row('Instalación física', sino(p.comFisica))}
         ${row('Imagen', sino(p.imagen))}${row('Fecha operativa', val(p.operativa))}
         ${row('Monitoreo', p.monitoreo === 'UP' ? '<span class="oc-ok">UP</span>' : p.monitoreo === 'DOWN' ? '<span class="oc-bad">DOWN</span>' : val(p.monitoreo))}</div>
-      <a class="oc-gm" href="https://www.google.com/maps?q=${p.lat.toFixed(6)},${p.lon.toFixed(6)}" target="_blank" rel="noopener">Ver en Google Maps</a>`;
+      ${geo(p) ? `<a class="oc-gm" href="https://www.google.com/maps?q=${p.lat.toFixed(6)},${p.lon.toFixed(6)}" target="_blank" rel="noopener">Ver en Google Maps</a>` : ''}`;
   }
   function select(p, pan){
     selKey = p ? key(p) : '';
     ficha(p);
     document.querySelectorAll('#ocTbl tbody tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.k === selKey));
     if (layer) layer.eachLayer(mk => { const el = mk.getElement && mk.getElement(); if (el && el.firstChild) el.firstChild.classList.toggle('sel', mk._ocKey === selKey); });
-    if (p && pan && map) map.setView([p.lat, p.lon], Math.max(map.getZoom(), 16));
+    if (p && pan && map && geo(p)) map.setView([p.lat, p.lon], Math.max(map.getZoom(), 16));
     if (p && pan && window.innerWidth <= 900) $('ocFicha').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function render(){
@@ -3020,7 +3031,7 @@ setInterval(async () => {
       .map(([k, v]) => `<div class="oc-kpi">${k}<b>${v}</b></div>`).join('');
     const tb = $('ocTbl').tBodies[0];
     tb.innerHTML = vis.length ? vis.map(p => `<tr data-k="${key(p)}"${key(p) === selKey ? ' class="sel"' : ''}>
-      <td class="mono">${code(p)}</td><td>${p.ola}</td><td>${val(p.dir)}</td><td>${val(p.barrio)}</td><td>${val(p.loc)}</td>
+      <td class="mono">${esc(p.id)}</td><td>${faseTag(p)}</td><td>${val(p.dir)}</td><td>${val(p.barrio)}</td><td>${val(p.loc)}</td>
       <td>${p.isp ? esc(NAMES[p.isp] || p.isp) : '—'}</td><td class="mono">${val(p.nodo)}</td><td>${val(p.cams)}</td><td>${val(p.fechaInst)}</td>
       <td style="color:${COLOR[estado(p)]};font-weight:600">${val(p.monitoreo)}</td></tr>`).join('')
       : `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">${PTS.length ? 'No hay puntos con esos filtros.' : 'Todavía no hay datos cargados de fases anteriores.'}</td></tr>`;
@@ -3032,15 +3043,17 @@ setInterval(async () => {
     if (layer) layer.remove();
     layer = L.featureGroup().addTo(map);
     vis.forEach(p => {
-      if (!isFinite(p.lat) || !isFinite(p.lon)) return;
-      const icon = L.divIcon({ className: '', iconSize: [18, 18], iconAnchor: [9, 9],
-        html: `<div class="oc-pin${key(p) === selKey ? ' sel' : ''}" style="background:${COLOR[estado(p)]}">${p.cams > 1 ? p.cams : ''}</div>` });
+      if (!geo(p)) return;
+      const icon = L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 10],
+        html: `<div class="oc-pin${key(p) === selKey ? ' sel' : ''}" style="background:${COLOR[estado(p)]}">${esc(p.ola)}</div>` });
       const mk = L.marker([p.lat, p.lon], { icon, title: code(p) + ' · ' + (p.dir || '') });
       mk._ocKey = key(p);
       mk.on('click', () => select(p, false));
       mk.addTo(layer);
     });
-    if (!fitted && vis.length) { map.fitBounds(layer.getBounds().pad(0.05)); fitted = true; }
+    if (!fitted && layer.getLayers().length) { map.fitBounds(layer.getBounds().pad(0.05)); fitted = true; }
+    const sinGeo = vis.filter(p => !geo(p));
+    $('ocSinGeo').textContent = sinGeo.length ? `${sinGeo.length} punto${sinGeo.length > 1 ? 's' : ''} sin coordenada en el Excel (no aparecen en el mapa, sí en la tabla): ID ${sinGeo.map(p => p.id).join(', ')}.` : '';
   }
   window.openConsulta = async () => {
     if (!loaded) await load();
