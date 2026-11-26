@@ -438,6 +438,8 @@ td.isp{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-2);
 .oc-fase.f4{background:rgba(168,85,247,.12); color:#9b4ee0; border-color:#9b4ee0}
 .oc-pin{width:20px; height:20px; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; font:700 10px/1 'JetBrains Mono',monospace; color:#fff}
 .oc-pin.sel{outline:3px solid #facc15}
+.oc-pin.futuro{width:16px; height:16px; font-size:9px; background:#c4c7d0; color:#5b6170; border-color:#9aa0ad}
+.oc-fase.f5{background:rgba(139,144,167,.15); color:#6b7180; border-color:#9aa0ad}
 @media (max-width:900px){ .oc-layout, .oc-layout.has-ficha{grid-template-columns:1fr} .oc-ficha{min-height:0; max-height:none} #olaMap{height:60vh} }
 .pf-pop a{display:inline-block; margin-top:8px; padding:5px 10px; border-radius:6px; background:#2D6A4F; color:#fff !important; text-decoration:none; font-weight:600}
 
@@ -603,6 +605,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
       <span><span class="dot" style="background:#22a565"></span>Funcionando (UP)</span>
       <span><span class="dot" style="background:#d64545"></span>DOWN</span>
       <span><span class="dot" style="background:#8b90a7"></span>Sin dato</span>
+      <span><span class="dot" style="background:#c4c7d0;border:1px solid #9aa0ad"></span>Fase 5 · punto futuro</span>
       <span>El número dentro de cada punto es la fase a la que pertenece.</span>
     </div>
     <div class="pm-note" id="ocSinGeo"></div>
@@ -2550,6 +2553,8 @@ async function bootstrap() {
     });
 
     initFromData(); // pobla filtros, listeners y renderiza la tabla
+    // Si la Consulta ya estaba abierta, se redibuja para sumar los puntos de la Fase 5
+    if (window.openConsulta && !$('tabConsulta').hidden) window.openConsulta();
   } catch (e) {
     console.error('[isp] Error cargando datos:', e);
     $('rowCount').textContent = 'Error: no se pudo cargar los datos (' + e.message + ')';
@@ -2971,7 +2976,18 @@ setInterval(async () => {
 (function(){
   const NAMES = { BIBOP: 'Bibop', F2H: 'F2H', TELVISO: 'Telviso', METROTEL: 'Metrotel' };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  let PTS = [], loaded = false, map = null, layer = null, fitted = false, selKey = '', prevView = null;
+  let PTS = [], OLAS = [], loaded = false, map = null, layer = null, fitted = false, selKey = '', prevView = null;
+  // Filtros de fase y localidad (se rearman al abrir la pestaña, por si la Fase 5 terminó de cargar después)
+  function armarFiltros(){
+    const n5 = fase5().length, fv = $('ocOla').value, lv = $('ocLoc').value;
+    $('ocOla').innerHTML = `<option value="">Todas las fases (${PTS.length + n5})</option>` +
+      OLAS.map(([o, n]) => `<option value="${esc(o)}">Fase ${esc(o)} (${n})</option>`).join('') +
+      (n5 ? `<option value="5">Fase 5 · puntos futuros (${n5})</option>` : '');
+    const locs = [...new Set(PTS.concat(fase5()).map(p => p.loc).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+    $('ocLoc').innerHTML = '<option value="">Todas las localidades</option>' + locs.map(l => `<option>${esc(l)}</option>`).join('');
+    if ([...$('ocOla').options].some(o => o.value === fv)) $('ocOla').value = fv;
+    if ([...$('ocLoc').options].some(o => o.value === lv)) $('ocLoc').value = lv;
+  }
   const key = p => p.ola + '-' + p.id;
   const code = p => 'ID ' + p.id;
   const geo = p => typeof p.lat === 'number' && typeof p.lon === 'number' && isFinite(p.lat) && isFinite(p.lon);
@@ -2989,9 +3005,7 @@ setInterval(async () => {
       PTS = [];
       Object.keys(d).sort().forEach(ola => (d[ola].puntos || []).forEach(p => PTS.push({ ...p, ola })));
       const olas = Object.keys(d).sort();
-      $('ocOla').innerHTML = (olas.length > 1 ? `<option value="">Todas las fases (${PTS.length})</option>` : '') + olas.map(o => `<option value="${esc(o)}">Fase ${esc(o)} (${(d[o].puntos || []).length})</option>`).join('');
-      const locs = [...new Set(PTS.map(p => p.loc).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
-      $('ocLoc').innerHTML = '<option value="">Todas las localidades</option>' + locs.map(l => `<option>${esc(l)}</option>`).join('');
+      OLAS = olas.map(o => [o, (d[o].puntos || []).length]);
       const carg = olas.map(o => d[o].cargado ? `Fase ${esc(o)}: datos del ${new Date(d[o].cargado).toLocaleDateString('es-AR')}` : '').filter(Boolean).join(' · ');
       $('ocNote').textContent = PTS.length ? 'Solo consulta. ' + carg + '.' : '';
       loaded = true;
@@ -3003,6 +3017,20 @@ setInterval(async () => {
       (!isp || (isp === '__SIN__' ? !p.isp : p.isp === isp)) && (!est || estado(p) === est) &&
       (!q || [p.id, p.dir, p.barrio, p.loc, p.nodo, p.milestone, p.gab].some(v => String(v == null ? '' : v).toLowerCase().includes(q))));
   }
+  // Fase 5 (Proyecto Cámaras V): puntos futuros, solo en el mapa y en gris. Salen de la tabla del Control de avance.
+  function fase5(){
+    // getIspAsignado / getLote se publican cuando termina de cargar el Control de avance
+    if (!window.getIspAsignado || !window.getLote) return [];
+    return (typeof DATA !== 'undefined' ? DATA : []).filter(r => typeof r.lat === 'number' && typeof r.lon === 'number' && isFinite(r.lat) && isFinite(r.lon))
+      .map(r => ({ id: r.id, ola: '5', futuro: true, dir: r.dir, barrio: r.barrio, loc: r.loc, lat: r.lat, lon: r.lon,
+                   isp: window.getIspAsignado(r.id), lote: window.getLote(r.id) }));
+  }
+  function fase5Filtrados(){
+    const q = $('ocQ').value.trim().toLowerCase(), ola = $('ocOla').value, loc = $('ocLoc').value, isp = $('ocIsp').value;
+    if ((ola && ola !== '5') || $('ocEst').value) return [];
+    return fase5().filter(p => (!loc || p.loc === loc) && (!isp || (isp === '__SIN__' ? !p.isp : p.isp === isp)) &&
+      (!q || [p.id, p.dir, p.barrio, p.loc].some(v => String(v == null ? '' : v).toLowerCase().includes(q))));
+  }
   function ficha(p){
     // La barra lateral solo se muestra con un punto seleccionado; el mapa se ajusta al nuevo ancho
     const lay = document.querySelector('#tabConsulta .oc-layout');
@@ -3013,6 +3041,19 @@ setInterval(async () => {
     if (!p) { $('ocFicha').innerHTML = ''; return; }
     const e = estado(p);
     const row = (k, v) => `<div class="oc-row"><span>${k}</span><span>${v}</span></div>`;
+    if (p.futuro) {
+      $('ocFicha').innerHTML = `
+        <h3>ID ${esc(p.id)} · ${val(p.dir)}</h3>
+        <div class="oc-sub">${faseTag(p)} · <span style="color:var(--muted);font-weight:600">Punto futuro (Proyecto Cámaras V)</span></div>
+        <div class="oc-sec"><h4>Proyecto</h4>${row('Fase', 'Fase 5')}${row('Lote', val(p.lote))}</div>
+        <div class="oc-sec"><h4>Ubicación</h4>
+          ${row('Dirección', val(p.dir))}${row('Barrio', val(p.barrio))}${row('Localidad', val(p.loc))}
+          ${row('Coordenada', `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`)}</div>
+        <div class="oc-sec"><h4>Conectividad</h4>${row('ISP asignado', p.isp ? esc(NAMES[p.isp] || p.isp) : '<span style="color:var(--muted)">Sin asignar</span>')}</div>
+        <div class="oc-sec" style="color:var(--muted);font-size:12px">El avance de este punto se sigue en la pestaña "Control de avance".</div>
+        <a class="oc-gm" href="https://www.google.com/maps?q=${p.lat.toFixed(6)},${p.lon.toFixed(6)}" target="_blank" rel="noopener">Ver en Google Maps</a>`;
+      return;
+    }
     $('ocFicha').innerHTML = `
       <h3>${code(p)} · ${val(p.dir)}</h3>
       <div class="oc-sub">${faseTag(p)} · <span style="color:${COLOR[e]};font-weight:600">${e === 'up' ? 'Funcionando' : e === 'prob' ? 'DOWN' : 'Sin dato de monitoreo'}</span></div>
@@ -3054,7 +3095,7 @@ setInterval(async () => {
       <td class="mono">${esc(p.id)}</td><td>${faseTag(p)}</td><td>${val(p.dir)}</td><td>${val(p.barrio)}</td><td>${val(p.loc)}</td>
       <td>${p.isp ? esc(NAMES[p.isp] || p.isp) : '—'}</td><td class="mono">${val(p.nodo)}</td><td>${val(p.cams)}</td><td>${val(p.fechaInst)}</td>
       <td style="color:${COLOR[estado(p)]};font-weight:600">${val(p.monitoreo)}</td></tr>`).join('')
-      : `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">${PTS.length ? 'No hay puntos con esos filtros.' : 'Todavía no hay datos cargados de fases anteriores.'}</td></tr>`;
+      : `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">${$('ocOla').value === '5' ? 'Los puntos de la Fase 5 son futuros: se ven solo en el mapa, en gris. Su avance está en la pestaña "Control de avance".' : PTS.length ? 'No hay puntos con esos filtros.' : 'Todavía no hay datos cargados de fases anteriores.'}</td></tr>`;
     if (typeof L === 'undefined') return;
     if (!map) {
       map = L.map('olaMap', { center: [-34.458, -58.912], zoom: 12 });
@@ -3064,6 +3105,15 @@ setInterval(async () => {
     }
     if (layer) layer.remove();
     layer = L.featureGroup().addTo(map);
+    // Primero la Fase 5 (gris, debajo), después las fases 3 y 4 encima
+    fase5Filtrados().forEach(p => {
+      const icon = L.divIcon({ className: '', iconSize: [16, 16], iconAnchor: [8, 8],
+        html: `<div class="oc-pin futuro${key(p) === selKey ? ' sel' : ''}">5</div>` });
+      const mk = L.marker([p.lat, p.lon], { icon, title: 'ID ' + p.id + ' · ' + (p.dir || '') + ' · Fase 5 (futuro)', zIndexOffset: -1000 });
+      mk._ocKey = key(p);
+      mk.on('click', () => select(p, false));
+      mk.addTo(layer);
+    });
     vis.forEach(p => {
       if (!geo(p)) return;
       const icon = L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 10],
@@ -3079,6 +3129,7 @@ setInterval(async () => {
   }
   window.openConsulta = async () => {
     if (!loaded) await load();
+    armarFiltros();
     render();
     setTimeout(() => map && map.invalidateSize(), 50);
   };
