@@ -3016,9 +3016,7 @@ setInterval(async () => {
   }
   function render(){
     const vis = filtrados();
-    const n = a => a.length;
-    const up = vis.filter(p => estado(p) === 'up'), pr = vis.filter(p => estado(p) === 'prob');
-    $('ocKpis').innerHTML = [['Puntos', n(vis)], ['Cámaras', vis.reduce((s, p) => s + (p.cams || 0), 0)], ['Funcionando (UP)', n(up)], ['DOWN', n(pr)], ['Sin dato', n(vis) - n(up) - n(pr)]]
+    $('ocKpis').innerHTML = [['Puntos', vis.length], ['Cámaras', vis.reduce((s, p) => s + (p.cams || 0), 0)]]
       .map(([k, v]) => `<div class="oc-kpi">${k}<b>${v}</b></div>`).join('');
     const tb = $('ocTbl').tBodies[0];
     tb.innerHTML = vis.length ? vis.map(p => `<tr data-k="${key(p)}"${key(p) === selKey ? ' class="sel"' : ''}>
