@@ -613,7 +613,7 @@ td.num-servicio, td.cantidad-mb, td.id-dispositivo, td.observacion-col, td.notif
     <div class="pm-note" id="ocSinGeo"></div>
     <div class="tbl-wrap oc-table-wrap"><div class="tbl-scroll">
       <table id="ocTbl">
-        <thead><tr><th>ID</th><th>Fase</th><th>Dirección</th><th>Barrio</th><th>Localidad</th><th>ISP</th><th>Nodo</th><th>Cám.</th><th>Instalación</th><th>Monitoreo</th></tr></thead>
+        <thead><tr><th>ID</th><th>Fase</th><th>Dirección</th><th>Barrio</th><th>Localidad</th><th>ISP</th><th>Número de servicio</th><th>N° de gabinete</th><th>Cám.</th><th>Instalación</th></tr></thead>
         <tbody></tbody>
       </table>
     </div></div>
@@ -3098,8 +3098,7 @@ setInterval(async () => {
     const tb = $('ocTbl').tBodies[0];
     tb.innerHTML = vis.length ? vis.map(p => `<tr data-k="${key(p)}"${key(p) === selKey ? ' class="sel"' : ''}>
       <td class="mono">${esc(p.id)}</td><td>${faseTag(p)}</td><td>${val(p.dir)}</td><td>${val(p.barrio)}</td><td>${val(p.loc)}</td>
-      <td>${p.isp ? esc(NAMES[p.isp] || p.isp) : '—'}</td><td class="mono">${val(p.nodo)}</td><td>${val(p.cams)}</td><td>${val(p.fechaInst)}</td>
-      <td style="color:${COLOR[estado(p)]};font-weight:600">${val(p.monitoreo)}</td></tr>`).join('')
+      <td>${p.isp ? esc(NAMES[p.isp] || p.isp) : '—'}</td><td class="mono">${val(p.nodo)}</td><td class="mono">${val(p.gab)}</td><td>${val(p.cams)}</td><td>${val(p.fechaInst)}</td></tr>`).join('')
       : `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">${$('ocOla').value === '5' ? 'Los puntos de la Fase 5 son futuros: se ven solo en el mapa, en gris. Su avance está en la pestaña "Control de avance".' : PTS.length ? 'No hay puntos con esos filtros.' : 'Todavía no hay datos cargados de fases anteriores.'}</td></tr>`;
     if (typeof L === 'undefined') return;
     if (!map) {
