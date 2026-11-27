@@ -658,7 +658,20 @@ const STATIC_PUBLIC = {
   '/icon-512-maskable.png':  { file: 'icon-512-maskable.png',  type: 'image/png' },
 };
 
-const server = http.createServer(async (req, res) => {
+// Cualquier error dentro de un pedido responde 500 y se registra, pero NUNCA tira abajo el servidor.
+const server = http.createServer((req, res) => {
+  handle(req, res).catch(e => {
+    console.log('[error]', req.method, req.url, '-', (e && e.stack) || e);
+    try {
+      if (!res.headersSent) { res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' }); res.end('{"error":"Error interno"}'); }
+      else res.end();
+    } catch (_) {}
+  });
+});
+process.on('uncaughtException', e => console.log('[uncaughtException]', (e && e.stack) || e));
+process.on('unhandledRejection', e => console.log('[unhandledRejection]', (e && e.stack) || e));
+
+async function handle(req, res) {
   const url = req.url.split('?')[0];
   const m = req.method;
 
@@ -1444,6 +1457,6 @@ const server = http.createServer(async (req, res) => {
   if (m === 'GET' && (url === '/' || url === '/index.html')) return serveFile(res, 'index.html', 'text/html; charset=utf-8');
 
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('No encontrado');
-});
+}
 
 server.listen(PORT, () => console.log(`Dashboard Camaras (login) escuchando en :${PORT}`));
